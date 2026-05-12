@@ -1,13 +1,13 @@
 namespace PhysicalMouse.Tests;
 
 /// <summary>
-/// Tests for the <see cref="MouseReport" /> contract.
+/// Tests for <see cref="MouseReport" />.
 /// </summary>
 [TestClass]
 public sealed class MouseReportTests
 {
     /// <summary>
-    /// Verifies that the empty report is recognized as empty.
+    /// Checks the empty report.
     /// </summary>
     [TestMethod]
     public void EmptyReportIsEmpty()
@@ -16,7 +16,7 @@ public sealed class MouseReportTests
     }
 
     /// <summary>
-    /// Verifies that a report with input is recognized as non-empty.
+    /// Checks a non-empty report.
     /// </summary>
     [TestMethod]
     public void NonEmptyReportIsNotEmpty()

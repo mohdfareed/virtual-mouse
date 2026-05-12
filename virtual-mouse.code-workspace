@@ -8,7 +8,9 @@
       "path": "firmware"
     }
   ],
-  "settings": {},
+  "settings": {
+    "powershell.cwd": "virtual-mouse"
+  },
   "extensions": {
     "recommendations": [
       "ms-vscode.cpptools-extension-pack",

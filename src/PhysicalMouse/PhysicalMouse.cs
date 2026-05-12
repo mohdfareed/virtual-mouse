@@ -5,50 +5,50 @@ using System.Threading.Tasks;
 namespace PhysicalMouse;
 
 /// <summary>
-/// Sends mouse reports to a physical mouse transport.
+/// Sends mouse reports to a transport.
 /// </summary>
-public interface IPhysicalMouse
+public interface IPhysicalMouse : IAsyncDisposable
 {
     /// <summary>
-    /// Sends a single mouse report without applying any extra buffering or transformation.
+    /// Gets whether the transport is connected.
     /// </summary>
-    /// <param name="report">The report to send.</param>
-    /// <param name="cancellationToken">Cancels the send operation.</param>
+    bool IsConnected { get; }
+
+    /// <summary>
+    /// Sends one mouse report.
+    /// </summary>
+    /// <param name="report">Report to send.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     ValueTask SendAsync(MouseReport report, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
-/// Mouse button state flags.
+/// Mouse button flags.
 /// </summary>
 [Flags]
 public enum MouseButtons
 {
-    /// <summary>No buttons are pressed.</summary>
+    /// <summary>No buttons.</summary>
     None = 0,
-
-    /// <summary>The left button is pressed.</summary>
+    /// <summary>Left button.</summary>
     Left = 1 << 0,
-
-    /// <summary>The right button is pressed.</summary>
+    /// <summary>Right button.</summary>
     Right = 1 << 1,
-
-    /// <summary>The middle button is pressed.</summary>
+    /// <summary>Middle button.</summary>
     Middle = 1 << 2,
-
-    /// <summary>The back button is pressed.</summary>
+    /// <summary>Back button.</summary>
     Back = 1 << 3,
-
-    /// <summary>The forward button is pressed.</summary>
+    /// <summary>Forward button.</summary>
     Forward = 1 << 4,
 }
 
 /// <summary>
-/// A single relative mouse input report.
+/// Relative mouse input.
 /// </summary>
-/// <param name="Buttons">The full current button state.</param>
-/// <param name="DeltaX">The relative horizontal movement.</param>
-/// <param name="DeltaY">The relative vertical movement.</param>
-/// <param name="WheelDelta">The relative vertical wheel movement.</param>
+/// <param name="Buttons">Current button state.</param>
+/// <param name="DeltaX">Horizontal delta.</param>
+/// <param name="DeltaY">Vertical delta.</param>
+/// <param name="WheelDelta">Wheel delta.</param>
 public readonly record struct MouseReport(
     MouseButtons Buttons,
     int DeltaX,
@@ -56,12 +56,12 @@ public readonly record struct MouseReport(
     int WheelDelta)
 {
     /// <summary>
-    /// An empty report with no movement, wheel input, or pressed buttons.
+    /// Empty input.
     /// </summary>
     public static MouseReport Empty => default;
 
     /// <summary>
-    /// Gets a value indicating whether the report contains no movement, wheel input, or pressed buttons.
+    /// Gets whether the report has no input.
     /// </summary>
     public bool IsEmpty =>
         Buttons == MouseButtons.None &&

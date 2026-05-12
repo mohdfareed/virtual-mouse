@@ -5,6 +5,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$project = Join-Path $PSScriptRoot "..\src\PhysicalMouse\PhysicalMouse.csproj"
+$solution = Join-Path $PSScriptRoot "..\virtual-mouse.slnx"
 
-dotnet build $project --configuration $Configuration
+dotnet build $solution --configuration $Configuration

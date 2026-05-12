@@ -5,6 +5,8 @@ Project for physical mouse forwarding transports.
 ## Projects
 
 - `src/PhysicalMouse`: core contracts
+- `src/PhysicalMouse.Viiper`: VIIPER transport
+- `src/PhysicalMouse.Teensy`: Teensy 4.0 transport
 - `tests/PhysicalMouse.Tests`: tests
 - `firmware`: microcontroller-side work
 

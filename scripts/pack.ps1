@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$project = Join-Path $PSScriptRoot "..\src\PhysicalMouse\PhysicalMouse.csproj"
+$solution = Join-Path $PSScriptRoot "..\virtual-mouse.slnx"
 $output = Join-Path $PSScriptRoot "..\artifacts\packages"
 
-dotnet pack $project --configuration $Configuration --output $output
+dotnet pack $solution --configuration $Configuration --output $output
