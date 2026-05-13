@@ -29,6 +29,7 @@ Do not set `LangVersion=latest`.
 - `src/PhysicalMouse.Viiper`: VIIPER transport
 - `src/PhysicalMouse.Teensy`: Teensy 4.0 transport
 - `tests/PhysicalMouse.Tests`: tests
+- `tools/PhysicalMouse.Cli`: CLI harness
 - `firmware`: microcontroller-side code
 - `scripts`: repo scripts
 
@@ -69,6 +70,7 @@ Do not set `LangVersion=latest`.
 - Use the tests to verify work while developing, not only at the end.
 - Keep tests in the solution.
 - Keep tests focused on behavior and mapping, not internal structure.
+- For retained CLI tools, prefer `System.CommandLine` over a hand-rolled parser.
 
 ## Logging Rules
 
