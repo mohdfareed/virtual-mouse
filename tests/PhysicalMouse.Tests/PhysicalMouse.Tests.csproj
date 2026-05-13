@@ -11,6 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\tools\PhysicalMouse.Cli\PhysicalMouse.Cli.csproj" />
     <ProjectReference Include="..\..\src\PhysicalMouse\PhysicalMouse.csproj" />
     <ProjectReference Include="..\..\src\PhysicalMouse.Teensy\PhysicalMouse.Teensy.csproj" />
     <ProjectReference Include="..\..\src\PhysicalMouse.Viiper\PhysicalMouse.Viiper.csproj" />

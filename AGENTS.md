@@ -141,4 +141,5 @@ The separator line is always 79 characters wide.
 - Prefer a small number of coherent files over many tiny files when the types are tightly related.
 - For CLI code, prefer a few coherent files grouped by command family or shared concerns.
 - Do not collapse the CLI into one large file, and do not split it into many tiny files with barely any logic.
+- Do not place source files under dot-prefixed folders in SDK-style projects; the default compile glob will skip them.
 - Preserve the existing repo tone and conventions once established.

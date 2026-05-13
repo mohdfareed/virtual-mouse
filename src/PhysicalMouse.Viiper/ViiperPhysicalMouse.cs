@@ -1,9 +1,9 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 using global::Viiper.Client;
 using global::Viiper.Client.Devices.Mouse;
+using Microsoft.Extensions.Logging;
 
 namespace PhysicalMouse.Viiper;
 

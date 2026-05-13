@@ -122,7 +122,7 @@ internal static class CliTestCommands
         string message = $"Commands/sec {fps}";
         if (includeStopHint)
         {
-            message += ". Press Ctrl+C to stop.";
+            message += ".\n\nPress Ctrl+C to stop.";
         }
 
         await Console.Out.WriteLineAsync(message).ConfigureAwait(false);
