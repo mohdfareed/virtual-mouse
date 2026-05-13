@@ -10,13 +10,10 @@ internal static class CliBasicCommands
     internal static Command CreateConnectCommand()
     {
         Command command = new("connect", "Connect and print the active IDs.");
-        CliConnection.ConnectionOptions options = CliConnection.AddOptions(command);
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
             _ = await CliConnection.ExecuteAsync(
-                parseResult,
-                options,
                 async (mouse, _) =>
                 {
                     await CliConnection.PrintConnectionAsync(mouse).ConfigureAwait(false);
@@ -43,7 +40,6 @@ internal static class CliBasicCommands
 
         command.Options.Add(dxOption);
         command.Options.Add(dyOption);
-        CliConnection.ConnectionOptions options = CliConnection.AddOptions(command);
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
@@ -51,8 +47,6 @@ internal static class CliBasicCommands
             int dy = parseResult.GetValue(dyOption);
 
             _ = await CliConnection.ExecuteAsync(
-                parseResult,
-                options,
                 async (mouse, ct) =>
                 {
                     await mouse.SendAsync(new MouseReport(MouseButtons.None, dx, dy, 0), ct).ConfigureAwait(false);
@@ -75,15 +69,12 @@ internal static class CliBasicCommands
         };
 
         command.Options.Add(buttonOption);
-        CliConnection.ConnectionOptions options = CliConnection.AddOptions(command);
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
             MouseButtons button = ParseButton(parseResult.GetValue(buttonOption) ?? throw new InvalidOperationException("Missing required --button value."));
 
             _ = await CliConnection.ExecuteAsync(
-                parseResult,
-                options,
                 async (mouse, ct) =>
                 {
                     await mouse.SendAsync(new MouseReport(button, 0, 0, 0), ct).ConfigureAwait(false);
@@ -107,15 +98,12 @@ internal static class CliBasicCommands
         };
 
         command.Options.Add(deltaOption);
-        CliConnection.ConnectionOptions options = CliConnection.AddOptions(command);
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
             int delta = parseResult.GetValue(deltaOption);
 
             _ = await CliConnection.ExecuteAsync(
-                parseResult,
-                options,
                 async (mouse, ct) =>
                 {
                     await mouse.SendAsync(new MouseReport(MouseButtons.None, 0, 0, delta), ct).ConfigureAwait(false);

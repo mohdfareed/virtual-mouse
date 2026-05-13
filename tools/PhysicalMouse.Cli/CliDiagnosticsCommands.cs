@@ -14,30 +14,13 @@ internal static class CliDiagnosticsCommands
     internal static Command CreateSmokeCommand()
     {
         Command command = new("smoke", "Move out and back with a pause.");
-        Option<int> distanceOption = new("--distance")
-        {
-            Description = "Distance to move before returning.",
-            DefaultValueFactory = _ => 50,
-        };
-
-        Option<int> pauseMsOption = new("--pause-ms")
-        {
-            Description = "Pause between the outbound and return move.",
-            DefaultValueFactory = _ => 1000,
-        };
-
-        command.Options.Add(distanceOption);
-        command.Options.Add(pauseMsOption);
-        CliConnection.ConnectionOptions options = CliConnection.AddOptions(command);
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            int distance = parseResult.GetValue(distanceOption);
-            int pauseMs = parseResult.GetValue(pauseMsOption);
+            const int distance = 300;
+            const int pauseMs = 1000;
 
             _ = await CliConnection.ExecuteAsync(
-                parseResult,
-                options,
                 async (mouse, ct) =>
                 {
                     await CliConnection.PrintConnectionAsync(mouse).ConfigureAwait(false);
@@ -56,55 +39,17 @@ internal static class CliDiagnosticsCommands
     internal static Command CreateBenchCommand()
     {
         Command command = new("bench", "Measure send-path cost over many reports.");
-        Option<int> countOption = new("--count")
-        {
-            Description = "Measured send count.",
-            DefaultValueFactory = _ => 10_000,
-        };
-
-        Option<int> warmupOption = new("--warmup")
-        {
-            Description = "Warmup send count.",
-            DefaultValueFactory = _ => 1_000,
-        };
-
-        Option<int> dxOption = new("--dx")
-        {
-            Description = "Horizontal delta per report.",
-            DefaultValueFactory = _ => 1,
-        };
-
-        Option<int> dyOption = new("--dy")
-        {
-            Description = "Vertical delta per report.",
-            DefaultValueFactory = _ => 0,
-        };
-
-        Option<int> wheelOption = new("--wheel")
-        {
-            Description = "Wheel delta per report.",
-            DefaultValueFactory = _ => 0,
-        };
-
-        command.Options.Add(countOption);
-        command.Options.Add(warmupOption);
-        command.Options.Add(dxOption);
-        command.Options.Add(dyOption);
-        command.Options.Add(wheelOption);
-        CliConnection.ConnectionOptions options = CliConnection.AddOptions(command);
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            int count = parseResult.GetValue(countOption);
-            int warmup = parseResult.GetValue(warmupOption);
-            int dx = parseResult.GetValue(dxOption);
-            int dy = parseResult.GetValue(dyOption);
-            int wheel = parseResult.GetValue(wheelOption);
+            const int count = 10_000;
+            const int warmup = 1_000;
+            const int dx = 1;
+            const int dy = 0;
+            const int wheel = 0;
             MouseReport report = new(MouseButtons.None, dx, dy, wheel);
 
             _ = await CliConnection.ExecuteAsync(
-                parseResult,
-                options,
                 async (mouse, ct) =>
                 {
                     await CliConnection.PrintConnectionAsync(mouse).ConfigureAwait(false);
@@ -137,54 +82,14 @@ internal static class CliDiagnosticsCommands
     internal static Command CreateSmoothCommand()
     {
         Command command = new("smooth", "Draw a slow circle for visual checking.");
-        Option<int> radiusOption = new("--radius")
-        {
-            Description = "Circle radius in pixels.",
-            DefaultValueFactory = _ => 80,
-        };
-
-        Option<int> stepsOption = new("--steps")
-        {
-            Description = "Number of reports in the circle.",
-            DefaultValueFactory = _ => 240,
-        };
-
-        Option<int> durationMsOption = new("--duration-ms")
-        {
-            Description = "Total circle duration.",
-            DefaultValueFactory = _ => 4000,
-        };
-
-        command.Options.Add(radiusOption);
-        command.Options.Add(stepsOption);
-        command.Options.Add(durationMsOption);
-        CliConnection.ConnectionOptions options = CliConnection.AddOptions(command);
-
-        stepsOption.Validators.Add(result =>
-        {
-            if (result.GetValue(stepsOption) < 4)
-            {
-                result.AddError("--steps must be at least 4.");
-            }
-        });
-
-        durationMsOption.Validators.Add(result =>
-        {
-            if (result.GetValue(durationMsOption) < 1)
-            {
-                result.AddError("--duration-ms must be greater than 0.");
-            }
-        });
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            int radius = parseResult.GetValue(radiusOption);
-            int steps = parseResult.GetValue(stepsOption);
-            int durationMs = parseResult.GetValue(durationMsOption);
+            const int radius = 80;
+            const int steps = 240;
+            const int durationMs = 4000;
 
             _ = await CliConnection.ExecuteAsync(
-                parseResult,
-                options,
                 async (mouse, ct) =>
                 {
                     await CliConnection.PrintConnectionAsync(mouse).ConfigureAwait(false);
