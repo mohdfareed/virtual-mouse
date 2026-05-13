@@ -2,17 +2,17 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Viiper.Client;
-using Viiper.Client.Devices.Mouse;
-using Viiper.Client.Types;
+using global::Viiper.Client;
+using global::Viiper.Client.Devices.Mouse;
 
 namespace PhysicalMouse.Viiper;
 
 /// <summary>VIIPER transport.</summary>
 public sealed partial class ViiperPhysicalMouse : IPhysicalMouse, IDisposable, IAsyncDisposable
 {
-    private readonly ViiperClient? _client;
     private readonly ILogger? _logger;
+    private readonly Mutex? _ownershipMutex;
+    private readonly ViiperClient? _client;
     private ViiperDevice? _device;
     private int _isConnected;
 
@@ -30,12 +30,19 @@ public sealed partial class ViiperPhysicalMouse : IPhysicalMouse, IDisposable, I
         HookDisconnect(device);
     }
 
-    private ViiperPhysicalMouse(ViiperClient client, ViiperDevice device, uint busId, string deviceId, ILogger? logger)
+    private ViiperPhysicalMouse(
+        ViiperClient client,
+        ViiperDevice device,
+        uint busId,
+        string deviceId,
+        ILogger? logger,
+        Mutex ownershipMutex)
     {
         _isConnected = 1;
         _client = client;
         _device = device;
         _logger = logger;
+        _ownershipMutex = ownershipMutex;
 
         BusId = busId;
         DeviceId = deviceId;
@@ -54,40 +61,6 @@ public sealed partial class ViiperPhysicalMouse : IPhysicalMouse, IDisposable, I
 
     /// <summary>Gets the connected device ID, if known.</summary>
     public string? DeviceId { get; }
-
-    /// <summary>
-    /// Creates and connects a VIIPER mouse device.
-    /// </summary>
-    /// <param name="options">Connection options.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Connected transport.</returns>
-    public static async Task<ViiperPhysicalMouse> ConnectAsync(
-        ViiperOptions options,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        ViiperClient client = new(options.Host, options.Port, options.Password);
-
-        try
-        {
-            Device createdDevice = await CreateDeviceAsync(client, options.Logger, cancellationToken).ConfigureAwait(false);
-
-            try
-            {
-                return await ConnectDeviceAsync(client, createdDevice, options.Logger, cancellationToken).ConfigureAwait(false);
-            }
-            catch
-            {
-                _ = await client.BusDeviceRemoveAsync(createdDevice.BusID, createdDevice.DevId, cancellationToken).ConfigureAwait(false);
-                throw;
-            }
-        }
-        catch
-        {
-            client.Dispose();
-            throw;
-        }
-    }
 
     /// <inheritdoc />
     public async ValueTask SendAsync(MouseReport report, CancellationToken cancellationToken = default)
@@ -137,6 +110,7 @@ public sealed partial class ViiperPhysicalMouse : IPhysicalMouse, IDisposable, I
         {
             await device.DisposeAsync().ConfigureAwait(false);
             _client?.Dispose();
+            ReleaseOwnershipMutex(_ownershipMutex);
         }
     }
 
@@ -154,59 +128,6 @@ public sealed partial class ViiperPhysicalMouse : IPhysicalMouse, IDisposable, I
             Wheel = checked((short)report.WheelDelta),
             Pan = 0,
         };
-    }
-
-    // MARK: Private
-    // ========================================================================
-
-    private static async Task<Device> CreateDeviceAsync(
-        ViiperClient client, ILogger? logger, CancellationToken cancellationToken)
-    {
-        uint resolvedBusId;
-        BusListResponse buses = await client.BusListAsync(cancellationToken).ConfigureAwait(false);
-
-        if (buses.Buses.Length > 0)
-        {
-            resolvedBusId = buses.Buses[0];
-        }
-        else
-        {
-            BusCreateResponse created = await client.BusCreateAsync(null, cancellationToken).ConfigureAwait(false);
-            resolvedBusId = created.BusID;
-            if (logger is not null)
-            {
-                Log.CreatingDevice(logger, resolvedBusId, null);
-            }
-        }
-
-        return await client.BusDeviceAddAsync(
-            resolvedBusId,
-            new DeviceCreateRequest
-            {
-                Type = "mouse",
-            },
-            cancellationToken).ConfigureAwait(false);
-    }
-
-    private static async Task<ViiperPhysicalMouse> ConnectDeviceAsync(
-        ViiperClient client, Device createdDevice, ILogger? logger, CancellationToken cancellationToken)
-    {
-        ViiperDevice device = await client.ConnectDeviceAsync(
-            createdDevice.BusID,
-            createdDevice.DevId,
-            cancellationToken).ConfigureAwait(false);
-
-        if (logger is not null)
-        {
-            Log.ConnectedKnownDevice(logger, createdDevice.BusID, createdDevice.DevId, null);
-        }
-
-        return new ViiperPhysicalMouse(
-            client,
-            device,
-            createdDevice.BusID,
-            createdDevice.DevId,
-            logger);
     }
 
     private void HookDisconnect(ViiperDevice device)

@@ -60,6 +60,8 @@ Do not set `LangVersion=latest`.
 - Keep implementation thin and explicit.
 - Use one VIIPER session model: create one mouse device on connect and remove it on dispose.
 - Do not add caller-controlled VIIPER device reuse or cleanup policy unless explicitly requested.
+- Mark created VIIPER devices with a fixed VID/PID pair and reclaim only those on startup.
+- Enforce one active VIIPER owner with a named mutex; concurrent instances should fail fast instead of competing.
 
 ## Teensy Notes
 

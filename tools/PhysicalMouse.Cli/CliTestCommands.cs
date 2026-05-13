@@ -10,9 +10,11 @@ internal static class CliTestCommands
 {
     private static readonly int[] SmokePresetDpis = [400, 800, 1600, 3200, 100, 6400];
 
-    private const double SmokeTravelInches = 0.25;
-    private const int SmokeMinSteps = 120;
-    private const int SmokeStepDelayMs = 2;
+    private const int SmokeDistance = 600;
+    private const int SmokeOneWayDurationMs = 1200;
+    private const int SmokeBaselineDpi = 800;
+    private const int SmokeBaselineSteps = 240;
+    private const int SmokeMinSteps = 60;
 
     // MARK: Commands
     // ========================================================================
@@ -90,10 +92,11 @@ internal static class CliTestCommands
 
                     if (dpi.HasValue)
                     {
-                        await Console.Out.WriteLineAsync($"DPI {dpi.Value}. Press Ctrl+C to stop.").ConfigureAwait(false);
+                        int steps = CalculateSmokeSteps(dpi.Value);
+                        await Console.Out.WriteLineAsync($"DPI {dpi.Value}. Distance {SmokeDistance}, duration {SmokeOneWayDurationMs} ms, steps {steps}. Press Ctrl+C to stop.").ConfigureAwait(false);
                         while (!ct.IsCancellationRequested)
                         {
-                            await RunSmokeAsync(mouse, dpi.Value, ct).ConfigureAwait(false);
+                            await RunSmokeAsync(mouse, steps, ct).ConfigureAwait(false);
                         }
 
                         return 0;
@@ -101,8 +104,9 @@ internal static class CliTestCommands
 
                     foreach (int presetDpi in SmokePresetDpis)
                     {
-                        await Console.Out.WriteLineAsync($"DPI {presetDpi}.").ConfigureAwait(false);
-                        await RunSmokeAsync(mouse, presetDpi, ct).ConfigureAwait(false);
+                        int steps = CalculateSmokeSteps(presetDpi);
+                        await Console.Out.WriteLineAsync($"DPI {presetDpi}. Distance {SmokeDistance}, duration {SmokeOneWayDurationMs} ms, steps {steps}.").ConfigureAwait(false);
+                        await RunSmokeAsync(mouse, steps, ct).ConfigureAwait(false);
                     }
 
                     await Console.Out.WriteLineAsync("Smoke OK.").ConfigureAwait(false);
@@ -117,15 +121,19 @@ internal static class CliTestCommands
     // MARK: Helpers
     // ========================================================================
 
+    private static int CalculateSmokeSteps(int dpi)
+    {
+        int scaledSteps = (int)Math.Round(SmokeBaselineSteps * (dpi / (double)SmokeBaselineDpi));
+        return Math.Clamp(scaledSteps, SmokeMinSteps, SmokeOneWayDurationMs);
+    }
+
     private static async Task RunSmokeAsync(
         ViiperPhysicalMouse mouse,
-        int dpi,
+        int steps,
         CancellationToken cancellationToken)
     {
-        int distance = Math.Max(1, (int)Math.Round(dpi * SmokeTravelInches));
-        int steps = Math.Max(SmokeMinSteps, distance);
-        await MoveLinearAsync(mouse, distance, steps, cancellationToken).ConfigureAwait(false);
-        await MoveLinearAsync(mouse, -distance, steps, cancellationToken).ConfigureAwait(false);
+        await MoveLinearAsync(mouse, SmokeDistance, steps, cancellationToken).ConfigureAwait(false);
+        await MoveLinearAsync(mouse, -SmokeDistance, steps, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task MoveLinearAsync(
@@ -135,6 +143,7 @@ internal static class CliTestCommands
         CancellationToken cancellationToken)
     {
         int sent = 0;
+        double delayMs = SmokeOneWayDurationMs / (double)steps;
 
         for (int step = 1; step <= steps; step++)
         {
@@ -146,7 +155,10 @@ internal static class CliTestCommands
                 sent = target;
             }
 
-            await Task.Delay(SmokeStepDelayMs, cancellationToken).ConfigureAwait(false);
+            if (step < steps)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(delayMs), cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 

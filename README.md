@@ -17,3 +17,7 @@ Project for physical mouse forwarding transports.
 - `.\scripts\test.ps1`
 - `.\scripts\pack.ps1`
 - `.\scripts\cli.ps1`
+
+## TODO
+
+- Replace the current single-owner VIIPER session model with a proper broker if concurrent game instances need to share one output mouse cleanly.

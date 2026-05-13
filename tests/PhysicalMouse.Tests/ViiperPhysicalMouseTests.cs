@@ -1,5 +1,8 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using PhysicalMouse.Viiper;
+using ViiperDeviceInfo = global::Viiper.Client.Types.Device;
 using ViiperMouseInput = global::Viiper.Client.Devices.Mouse.MouseInput;
 
 namespace PhysicalMouse.Tests;
@@ -57,6 +60,75 @@ public sealed class ViiperPhysicalMouseTests
         catch (ArgumentNullException)
         {
         }
+    }
+
+    /// <summary>Checks owned device detection.</summary>
+    [TestMethod]
+    public void IsOwnedDeviceReturnsTrueForOwnedMouse()
+    {
+        ViiperDeviceInfo device = new()
+        {
+            BusID = 1,
+            DeviceSpecific = [],
+            DevId = "1",
+            Pid = ViiperPhysicalMouse.FormatUsbId(ViiperPhysicalMouse.OwnedProductId),
+            Type = "mouse",
+            Vid = ViiperPhysicalMouse.FormatUsbId(ViiperPhysicalMouse.OwnedVendorId),
+        };
+
+        Assert.IsTrue(ViiperPhysicalMouse.IsOwnedDevice(device));
+    }
+
+    /// <summary>Checks foreign device detection.</summary>
+    [TestMethod]
+    public void IsOwnedDeviceReturnsFalseForForeignMouse()
+    {
+        ViiperDeviceInfo device = new()
+        {
+            BusID = 1,
+            DeviceSpecific = [],
+            DevId = "1",
+            Pid = "0x0001",
+            Type = "mouse",
+            Vid = ViiperPhysicalMouse.FormatUsbId(ViiperPhysicalMouse.OwnedVendorId),
+        };
+
+        Assert.IsFalse(ViiperPhysicalMouse.IsOwnedDevice(device));
+    }
+
+    /// <summary>Checks single-owner mutex behavior.</summary>
+    [TestMethod]
+    public void TryAcquireOwnershipMutexReturnsNullWhenAlreadyOwned()
+    {
+        string mutexName = $@"Local\PhysicalMouse.Viiper.Tests.{Guid.NewGuid():N}";
+        Mutex? first = ViiperPhysicalMouse.TryAcquireOwnershipMutex(mutexName);
+        Assert.IsNotNull(first);
+
+        Task<bool> secondAcquireTask = Task.Run(() =>
+        {
+            Mutex? second = ViiperPhysicalMouse.TryAcquireOwnershipMutex(mutexName);
+            if (second is null)
+            {
+                return false;
+            }
+
+            second.ReleaseMutex();
+            second.Dispose();
+            return true;
+        });
+
+        bool secondAcquired;
+        try
+        {
+            secondAcquired = secondAcquireTask.GetAwaiter().GetResult();
+        }
+        finally
+        {
+            first.ReleaseMutex();
+            first.Dispose();
+        }
+
+        Assert.IsFalse(secondAcquired);
     }
 
 }
