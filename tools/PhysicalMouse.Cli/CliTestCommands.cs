@@ -8,13 +8,11 @@ using PhysicalMouse.Viiper;
 
 internal static class CliTestCommands
 {
-    private static readonly int[] SmokePresetDpis = [400, 800, 1600, 3200, 100, 6400];
+    private static readonly int[] SmokePresetFps = [30, 60, 120, 240, 480, 960];
 
-    private const int SmokeDistance = 600;
-    private const int SmokeOneWayDurationMs = 1200;
-    private const int SmokeBaselineDpi = 800;
-    private const int SmokeBaselineSteps = 240;
-    private const int SmokeMinSteps = 60;
+    private const int SmokeDistance = 500;
+    private const int SmokeOneWayDurationMs = 250;
+    private const int SmokeMinFps = 1;
 
     // MARK: Commands
     // ========================================================================
@@ -65,48 +63,46 @@ internal static class CliTestCommands
     internal static Command CreateSmokeCommand()
     {
         Command command = new("smoke", "Run a horizontal sweep for visual checking.");
-        Option<int?> dpiOption = new("--dpi")
+        Option<int?> fpsOption = new("--fps")
         {
-            Description = "Lock to one DPI and loop until Ctrl+C.",
+            Description = "Lock to one command rate and loop until Ctrl+C.",
         };
 
-        command.Options.Add(dpiOption);
+        command.Options.Add(fpsOption);
 
-        dpiOption.Validators.Add(result =>
+        fpsOption.Validators.Add(result =>
         {
-            int? dpi = result.GetValue(dpiOption);
-            if (dpi.HasValue && dpi.Value < 1)
+            int? fps = result.GetValue(fpsOption);
+            if (fps.HasValue && fps.Value < SmokeMinFps)
             {
-                result.AddError("--dpi must be greater than 0.");
+                result.AddError("--fps must be greater than 0.");
             }
         });
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            int? dpi = parseResult.GetValue(dpiOption);
+            int? fps = parseResult.GetValue(fpsOption);
 
             _ = await CliConnection.ExecuteAsync(
                 async (mouse, ct) =>
                 {
                     await CliConnection.PrintConnectionAsync(mouse).ConfigureAwait(false);
 
-                    if (dpi.HasValue)
+                    if (fps.HasValue)
                     {
-                        int steps = CalculateSmokeSteps(dpi.Value);
-                        await Console.Out.WriteLineAsync($"DPI {dpi.Value}. Distance {SmokeDistance}, duration {SmokeOneWayDurationMs} ms, steps {steps}. Press Ctrl+C to stop.").ConfigureAwait(false);
+                        await PrintSmokeProfileAsync(fps.Value, includeStopHint: true).ConfigureAwait(false);
                         while (!ct.IsCancellationRequested)
                         {
-                            await RunSmokeAsync(mouse, steps, ct).ConfigureAwait(false);
+                            await RunSmokeAsync(mouse, fps.Value, ct).ConfigureAwait(false);
                         }
 
                         return 0;
                     }
 
-                    foreach (int presetDpi in SmokePresetDpis)
+                    foreach (int presetFps in SmokePresetFps)
                     {
-                        int steps = CalculateSmokeSteps(presetDpi);
-                        await Console.Out.WriteLineAsync($"DPI {presetDpi}. Distance {SmokeDistance}, duration {SmokeOneWayDurationMs} ms, steps {steps}.").ConfigureAwait(false);
-                        await RunSmokeAsync(mouse, steps, ct).ConfigureAwait(false);
+                        await PrintSmokeProfileAsync(presetFps, includeStopHint: false).ConfigureAwait(false);
+                        await RunSmokeAsync(mouse, presetFps, ct).ConfigureAwait(false);
                     }
 
                     await Console.Out.WriteLineAsync("Smoke OK.").ConfigureAwait(false);
@@ -121,17 +117,23 @@ internal static class CliTestCommands
     // MARK: Helpers
     // ========================================================================
 
-    private static int CalculateSmokeSteps(int dpi)
+    private static async Task PrintSmokeProfileAsync(int fps, bool includeStopHint)
     {
-        int scaledSteps = (int)Math.Round(SmokeBaselineSteps * (dpi / (double)SmokeBaselineDpi));
-        return Math.Clamp(scaledSteps, SmokeMinSteps, SmokeOneWayDurationMs);
+        string message = $"Commands/sec {fps}";
+        if (includeStopHint)
+        {
+            message += ". Press Ctrl+C to stop.";
+        }
+
+        await Console.Out.WriteLineAsync(message).ConfigureAwait(false);
     }
 
     private static async Task RunSmokeAsync(
         ViiperPhysicalMouse mouse,
-        int steps,
+        int fps,
         CancellationToken cancellationToken)
     {
+        int steps = Math.Max(1, (int)Math.Round(fps * (SmokeOneWayDurationMs / 1000.0)));
         await MoveLinearAsync(mouse, SmokeDistance, steps, cancellationToken).ConfigureAwait(false);
         await MoveLinearAsync(mouse, -SmokeDistance, steps, cancellationToken).ConfigureAwait(false);
     }
@@ -143,7 +145,8 @@ internal static class CliTestCommands
         CancellationToken cancellationToken)
     {
         int sent = 0;
-        double delayMs = SmokeOneWayDurationMs / (double)steps;
+        long start = Stopwatch.GetTimestamp();
+        double durationTicks = Stopwatch.Frequency * (SmokeOneWayDurationMs / 1000.0);
 
         for (int step = 1; step <= steps; step++)
         {
@@ -157,9 +160,26 @@ internal static class CliTestCommands
 
             if (step < steps)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(delayMs), cancellationToken).ConfigureAwait(false);
+                long nextDeadline = steps > 1
+                    ? start + (long)Math.Round(step * durationTicks / (steps - 1))
+                    : start;
+
+                await DelayUntilAsync(nextDeadline, cancellationToken).ConfigureAwait(false);
             }
         }
+    }
+
+    private static async Task DelayUntilAsync(long deadline, CancellationToken cancellationToken)
+    {
+        long remaining = deadline - Stopwatch.GetTimestamp();
+        if (remaining <= 0)
+        {
+            return;
+        }
+
+        await Task.Delay(
+            TimeSpan.FromSeconds(remaining / (double)Stopwatch.Frequency),
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task PrintBenchmarkAsync(int count, int warmup, long totalElapsed, long[] samples)
