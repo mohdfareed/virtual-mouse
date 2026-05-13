@@ -159,12 +159,20 @@ internal static class Program
             DefaultValueFactory = _ => 50,
         };
 
+        Option<int> pauseMsOption = new("--pause-ms")
+        {
+            Description = "Pause between the outbound and return move.",
+            DefaultValueFactory = _ => 1000,
+        };
+
         command.Options.Add(distanceOption);
+        command.Options.Add(pauseMsOption);
         ConnectionOptions options = AddConnectionOptions(command);
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
             int distance = parseResult.GetValue(distanceOption);
+            int pauseMs = parseResult.GetValue(pauseMsOption);
 
             _ = await ExecuteWithMouseAsync(
                 parseResult,
@@ -173,8 +181,9 @@ internal static class Program
                 {
                     await PrintConnectionAsync(mouse).ConfigureAwait(false);
                     await mouse.SendAsync(new MouseReport(MouseButtons.None, distance, 0, 0), ct).ConfigureAwait(false);
+                    await Task.Delay(pauseMs, ct).ConfigureAwait(false);
                     await mouse.SendAsync(new MouseReport(MouseButtons.None, -distance, 0, 0), ct).ConfigureAwait(false);
-                    await Console.Out.WriteLineAsync($"Smoke OK. Moved +{distance} then -{distance}.").ConfigureAwait(false);
+                    await Console.Out.WriteLineAsync($"Smoke OK. Moved +{distance}, waited {pauseMs} ms, then moved -{distance}.").ConfigureAwait(false);
                     return 0;
                 },
                 cancellationToken).ConfigureAwait(false);
@@ -339,6 +348,12 @@ internal static class Program
             Description = "trace, debug, information, warning, error, critical, or none.",
         };
 
+        Option<int> settleMsOption = new("--settle-ms")
+        {
+            Description = "Delay after connect before the first send.",
+            DefaultValueFactory = _ => 750,
+        };
+
         command.Options.Add(hostOption);
         command.Options.Add(portOption);
         command.Options.Add(passwordOption);
@@ -346,6 +361,7 @@ internal static class Program
         command.Options.Add(deviceIdOption);
         command.Options.Add(removeCreatedDeviceOnDisposeOption);
         command.Options.Add(logLevelOption);
+        command.Options.Add(settleMsOption);
 
         deviceIdOption.Validators.Add(result =>
         {
@@ -373,7 +389,8 @@ internal static class Program
             busIdOption,
             deviceIdOption,
             removeCreatedDeviceOnDisposeOption,
-            logLevelOption);
+            logLevelOption,
+            settleMsOption);
     }
 
     private static async Task<int> ExecuteWithMouseAsync(
@@ -389,6 +406,12 @@ internal static class Program
 
         try
         {
+            int settleMs = parseResult.GetValue(options.SettleMsOption);
+            if (settleMs > 0)
+            {
+                await Task.Delay(settleMs, cancellationToken).ConfigureAwait(false);
+            }
+
             return await action(mouse, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -457,5 +480,6 @@ internal static class Program
         Option<uint?> BusIdOption,
         Option<string?> DeviceIdOption,
         Option<bool> RemoveCreatedDeviceOnDisposeOption,
-        Option<string?> LogLevelOption);
+        Option<string?> LogLevelOption,
+        Option<int> SettleMsOption);
 }
