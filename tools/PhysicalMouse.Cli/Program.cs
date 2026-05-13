@@ -9,17 +9,14 @@ internal static class Program
 
     private static Task<int> Main(string[] args)
     {
-        RootCommand root = new("CLI for VIIPER tests.");
-        root.Subcommands.Add(CliBasicCommands.CreateConnectCommand());
-        root.Subcommands.Add(CliBasicCommands.CreateMoveCommand());
-        root.Subcommands.Add(CliBasicCommands.CreateClickCommand());
-        root.Subcommands.Add(CliBasicCommands.CreateWheelCommand());
+        RootCommand root = new("Physical mouse transport CLI.");
+        root.Subcommands.Add(CliTestCommands.CreateBenchCommand());
         if (OperatingSystem.IsWindows())
         {
             root.Subcommands.Add(CliSteamCommands.CreateSteamCommand());
+            root.Subcommands.Add(CliSteamCommands.CreateNullifyCommand());
         }
-        root.Subcommands.Add(CliTestCommands.CreateSmokeCommand());
-        root.Subcommands.Add(CliTestCommands.CreateBenchCommand());
+
         return root.Parse(args).InvokeAsync();
     }
 }

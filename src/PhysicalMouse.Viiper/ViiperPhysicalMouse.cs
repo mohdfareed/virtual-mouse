@@ -63,16 +63,16 @@ public sealed partial class ViiperPhysicalMouse : IPhysicalMouse, IDisposable, I
     public string? DeviceId { get; }
 
     /// <inheritdoc />
-    public async ValueTask SendAsync(MouseReport report, CancellationToken cancellationToken = default)
+    public ValueTask SendAsync(MouseReport report, CancellationToken cancellationToken = default)
     {
-        if (!IsConnected || _device is null)
+        ViiperDevice? device = _device;
+        if (!IsConnected || device is null)
         {
             throw new InvalidOperationException("Mouse is not connected.");
         }
 
         // map and forward without extra processing
-        MouseInput input = MapReport(report);
-        await _device.SendAsync(input, cancellationToken).ConfigureAwait(false);
+        return new ValueTask(device.SendAsync(MapReport(report), cancellationToken));
     }
 
     // MARK: Disposal

@@ -12,8 +12,7 @@ internal static partial class SteamNullifier
     private const int WmDestroy = 0x0002;
     private const int WmInput = 0x00FF;
     private const int RawInputMouse = 0;
-    private const int MouseWheel = 0x0400;
-    private const int WheelDelta = 120;
+    private const int DeviceName = 0x20000007;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Message
@@ -95,15 +94,15 @@ internal static partial class SteamNullifier
     private static partial class NativeMethods
     {
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
         public static partial nint GetModuleHandle(string? moduleName);
 
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [LibraryImport("user32.dll", SetLastError = true)]
+        [LibraryImport("user32.dll", EntryPoint = "RegisterClassExW", SetLastError = true)]
         public static partial ushort RegisterClassEx(ref WindowClassEx windowClass);
 
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [LibraryImport("user32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        [LibraryImport("user32.dll", EntryPoint = "CreateWindowExW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
         public static partial nint CreateWindowEx(
             int exStyle,
             string className,
@@ -128,7 +127,11 @@ internal static partial class SteamNullifier
         public static partial int GetRawInputData(nint rawInput, uint command, nint data, ref uint size, uint headerSize);
 
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [LibraryImport("user32.dll", SetLastError = true)]
+        [LibraryImport("user32.dll", EntryPoint = "GetRawInputDeviceInfoW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        public static partial uint GetRawInputDeviceInfo(nint device, uint command, nint data, ref uint size);
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [LibraryImport("user32.dll", EntryPoint = "GetMessageW", SetLastError = true)]
         public static partial int GetMessage(out Message message, nint windowHandle, uint min, uint max);
 
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
@@ -137,7 +140,7 @@ internal static partial class SteamNullifier
         public static partial bool TranslateMessage(ref Message message);
 
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [LibraryImport("user32.dll")]
+        [LibraryImport("user32.dll", EntryPoint = "DispatchMessageW")]
         public static partial nint DispatchMessage(ref Message message);
 
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
@@ -146,7 +149,7 @@ internal static partial class SteamNullifier
         public static partial bool DestroyWindow(nint windowHandle);
 
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [LibraryImport("user32.dll", SetLastError = true)]
+        [LibraryImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static partial bool PostMessage(nint windowHandle, uint message, nint wParam, nint lParam);
 
@@ -155,7 +158,7 @@ internal static partial class SteamNullifier
         public static partial void PostQuitMessage(int exitCode);
 
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [LibraryImport("user32.dll")]
+        [LibraryImport("user32.dll", EntryPoint = "DefWindowProcW")]
         public static partial nint DefWindowProc(nint hwnd, uint message, nint wParam, nint lParam);
     }
 }

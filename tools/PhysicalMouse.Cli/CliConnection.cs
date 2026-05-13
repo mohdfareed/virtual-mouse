@@ -55,9 +55,10 @@ internal static class CliConnection
 
     internal static async Task PrintConnectionAsync(ViiperPhysicalMouse mouse)
     {
-        await Console.Out.WriteLineAsync($"Connected: {mouse.IsConnected}").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"BusId: {mouse.BusId?.ToString(CultureInfo.InvariantCulture) ?? "<unknown>"}").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"DeviceId: {mouse.DeviceId ?? "<unknown>"}").ConfigureAwait(false);
+        string connectionStatus = mouse.IsConnected ? "yes" : "no";
+        string busId = mouse.BusId?.ToString(CultureInfo.InvariantCulture) ?? "?";
+        string deviceId = mouse.DeviceId ?? "?";
+        await Console.Out.WriteLineAsync($"viiper connected={connectionStatus} bus={busId} device={deviceId}").ConfigureAwait(false);
     }
 
     // MARK: Helpers

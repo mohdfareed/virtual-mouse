@@ -44,6 +44,7 @@ Do not set `LangVersion=latest`.
 - Do not add a shared factory or transport manager unless explicitly requested.
 - Do not add a shared cross-transport options type.
 - `IPhysicalMouse` represents a usable mouse session, not a transport factory.
+- Treat 1000 Hz mouse-rate input and sub-2-5 ms added latency as hot-path design targets.
 
 ## Current API Direction
 
@@ -58,8 +59,8 @@ Do not set `LangVersion=latest`.
 - Map `MouseReport` directly to VIIPER mouse input.
 - Fail on unsupported ranges rather than clamping silently.
 - Keep implementation thin and explicit.
+- Steam nullifier commands should ignore the owned VIIPER output device by VID/PID so the Steam path does not feed back on itself.
 - Use one VIIPER session model: create one mouse device on connect and remove it on dispose.
-- Do not add caller-controlled VIIPER device reuse or cleanup policy unless explicitly requested.
 - Mark created VIIPER devices with a fixed VID/PID pair and reclaim only those on startup.
 - Enforce one active VIIPER owner with a named mutex; concurrent instances should fail fast instead of competing.
 
@@ -75,6 +76,7 @@ Do not set `LangVersion=latest`.
 - Keep tests in the solution.
 - Keep tests focused on behavior and mapping, not internal structure.
 - For retained CLI tools, prefer `System.CommandLine` over a hand-rolled parser.
+- CLI output should be concise, aligned, and value-first; avoid prose verdicts and unexplained benchmark jargon.
 
 ## Logging Rules
 

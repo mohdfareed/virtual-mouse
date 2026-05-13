@@ -3,6 +3,12 @@ using System.CommandLine;
 using System.Runtime.Versioning;
 using PhysicalMouse;
 
+internal enum SteamMouseMode
+{
+    Nullify,
+    Forward,
+}
+
 internal static class CliSteamCommands
 {
     // MARK: Commands
@@ -11,31 +17,19 @@ internal static class CliSteamCommands
     [SupportedOSPlatform("windows")]
     internal static Command CreateSteamCommand()
     {
-        Command command = new("steam", "Steam input tools.");
-        Option<bool> nullOption = new("--null")
-        {
-            Description = "Mirror Steam legacy mouse input back to the output mouse until Ctrl+C.",
-            Required = true,
-        };
+        return CreateBridgeCommand(
+            "steam",
+            "Forward Steam mouse input to the output mouse.",
+            SteamMouseMode.Forward);
+    }
 
-        command.Options.Add(nullOption);
-
-        command.SetAction(async (parseResult, cancellationToken) =>
-        {
-            _ = parseResult.GetValue(nullOption);
-
-            _ = await CliConnection.ExecuteAsync(
-                async (mouse, ct) =>
-                {
-                    await CliConnection.PrintConnectionAsync(mouse).ConfigureAwait(false);
-                    await Console.Out.WriteLineAsync("Steam nullifier running. Press Ctrl+C to stop.").ConfigureAwait(false);
-                    SteamNullifier.Run(mouse, ct);
-                    return 0;
-                },
-                cancellationToken).ConfigureAwait(false);
-        });
-
-        return command;
+    [SupportedOSPlatform("windows")]
+    internal static Command CreateNullifyCommand()
+    {
+        return CreateBridgeCommand(
+            "nullify",
+            "Send opposite Steam mouse movement to the output mouse.",
+            SteamMouseMode.Nullify);
     }
 
     // MARK: Helpers
@@ -43,6 +37,38 @@ internal static class CliSteamCommands
 
     internal static MouseReport Nullify(MouseReport report)
     {
-        return new MouseReport(report.Buttons, -report.DeltaX, -report.DeltaY, -report.WheelDelta);
+        return new MouseReport(MouseButtons.None, -report.DeltaX, -report.DeltaY, 0);
+    }
+
+    internal static MouseReport ApplyMode(MouseReport report, SteamMouseMode mode)
+    {
+        return mode switch
+        {
+            SteamMouseMode.Nullify => Nullify(report),
+            SteamMouseMode.Forward => report,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+        };
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static Command CreateBridgeCommand(string name, string description, SteamMouseMode mode)
+    {
+        Command command = new(name, description);
+        command.SetAction(async (parseResult, cancellationToken) =>
+        {
+            _ = parseResult;
+
+            _ = await CliConnection.ExecuteAsync(
+                async (mouse, ct) =>
+                {
+                    await CliConnection.PrintConnectionAsync(mouse).ConfigureAwait(false);
+                    await Console.Out.WriteLineAsync($"{name}: running. Ctrl+C to stop.").ConfigureAwait(false);
+                    SteamNullifier.Run(mouse, mode, ct);
+                    return 0;
+                },
+                cancellationToken).ConfigureAwait(false);
+        });
+
+        return command;
     }
 }
