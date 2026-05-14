@@ -1,8 +1,14 @@
 using System;
 using System.CommandLine;
 using System.Diagnostics;
+using System.Runtime.Versioning;
+using System.Threading;
 using System.Threading.Tasks;
 using PhysicalMouse;
+using PhysicalMouse.Viiper;
+using VirtualMouse;
+using VirtualMouse.RawInput;
+using ViiperMouseInput = global::Viiper.Client.Devices.Mouse.MouseInput;
 
 internal static class CliTestCommands
 {
@@ -14,47 +20,19 @@ internal static class CliTestCommands
 
     internal static Command CreateBenchCommand()
     {
-        Command command = new("bench", "Measure VIIPER mouse send cost.");
-        Option<int?> countOption = new("--count")
-        {
-            Description = $"Measured sends. Default: {BenchmarkCount}.",
-        };
+        Command command = new("bench", "Measure repository mouse forwarding cost.");
+        Option<int?> countOption = CreateCountOption();
 
         command.Options.Add(countOption);
         AddPositiveValidator(countOption, "--count");
+        command.Subcommands.Add(CreateBridgeBenchCommand());
+        command.Subcommands.Add(CreateRawBenchCommand());
+        command.Subcommands.Add(CreateAllBenchCommand());
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
             int count = parseResult.GetValue(countOption) ?? BenchmarkCount;
-            MouseReport report = new(MouseButtons.None, 1, 0, 0);
-
-            _ = await CliConnection.ExecuteAsync(
-                async (mouse, ct) =>
-                {
-                    await CliConnection.PrintConnectionAsync(mouse).ConfigureAwait(false);
-
-                    for (int i = 0; i < BenchmarkWarmup; i++)
-                    {
-                        await mouse.SendAsync(report, ct).ConfigureAwait(false);
-                    }
-
-                    long[] samples = new long[count];
-                    long allocatedBefore = GC.GetTotalAllocatedBytes(precise: false);
-                    long totalStart = Stopwatch.GetTimestamp();
-
-                    for (int i = 0; i < count; i++)
-                    {
-                        long start = Stopwatch.GetTimestamp();
-                        await mouse.SendAsync(report, ct).ConfigureAwait(false);
-                        samples[i] = Stopwatch.GetTimestamp() - start;
-                    }
-
-                    long totalElapsed = Stopwatch.GetTimestamp() - totalStart;
-                    long allocatedBytes = GC.GetTotalAllocatedBytes(precise: false) - allocatedBefore;
-                    await PrintBenchmarkAsync(count, totalElapsed, samples, allocatedBytes).ConfigureAwait(false);
-                    return 0;
-                },
-                cancellationToken).ConfigureAwait(false);
+            await RunBridgeBenchAsync(count, cancellationToken).ConfigureAwait(false);
         });
 
         return command;
@@ -63,32 +41,228 @@ internal static class CliTestCommands
     // MARK: Helpers
     // ========================================================================
 
-    private static async Task PrintBenchmarkAsync(
-        int count,
-        long totalElapsed,
-        long[] samples,
-        long allocatedBytes)
+    private static Command CreateBridgeBenchCommand()
     {
+        Command command = new("bridge", "Measure callback to VIIPER API boundary.");
+        Option<int?> countOption = CreateCountOption();
+
+        command.Options.Add(countOption);
+        AddPositiveValidator(countOption, "--count");
+
+        command.SetAction(async (parseResult, cancellationToken) =>
+        {
+            int count = parseResult.GetValue(countOption) ?? BenchmarkCount;
+            await RunBridgeBenchAsync(count, cancellationToken).ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
+    private static Command CreateRawBenchCommand()
+    {
+        Command command = new("raw", "Measure Raw Input read/decode to callback boundary.");
+        Option<int?> countOption = CreateCountOption();
+
+        command.Options.Add(countOption);
+        AddPositiveValidator(countOption, "--count");
+
+        command.SetAction(async (parseResult, cancellationToken) =>
+        {
+            int count = parseResult.GetValue(countOption) ?? BenchmarkCount;
+            await RunRawBenchAsync(count, cancellationToken).ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
+    private static Command CreateAllBenchCommand()
+    {
+        Command command = new("all", "Measure Raw Input and bridge boundaries.");
+        Option<int?> countOption = CreateCountOption();
+
+        command.Options.Add(countOption);
+        AddPositiveValidator(countOption, "--count");
+
+        command.SetAction(async (parseResult, cancellationToken) =>
+        {
+            int count = parseResult.GetValue(countOption) ?? BenchmarkCount;
+            await RunBridgeBenchAsync(count, cancellationToken).ConfigureAwait(false);
+            await RunRawBenchAsync(count, cancellationToken).ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
+    private static async Task RunBridgeBenchAsync(int count, CancellationToken cancellationToken)
+    {
+        MouseReport report = new(MouseButtons.None, 1, 0, 0);
+        BenchmarkResult benchmark = BenchmarkSourceToViiperApi(report, count, cancellationToken);
+        await PrintBenchmarkAsync("bench bridge source->viiper-api", benchmark).ConfigureAwait(false);
+    }
+
+    private static async Task RunRawBenchAsync(int count, CancellationToken cancellationToken)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            await Console.Error.WriteLineAsync("bench raw requires Windows.").ConfigureAwait(false);
+            return;
+        }
+
+        await Console.Out.WriteLineAsync(
+            $"bench raw: move the mouse until {count:N0} reports are collected.").ConfigureAwait(false);
+
+        BenchmarkResult benchmark = await BenchmarkRawInputAsync(count, cancellationToken).ConfigureAwait(false);
+        await PrintBenchmarkAsync("bench raw api->callback", benchmark).ConfigureAwait(false);
+    }
+
+    [SupportedOSPlatform("windows")]
+    internal static async Task<BenchmarkResult> BenchmarkRawInputAsync(
+        int count,
+        CancellationToken cancellationToken)
+    {
+        using RawInputVirtualMouse input = await RawInputVirtualMouse
+            .ConnectAsync(cancellationToken)
+            .ConfigureAwait(false);
+        using CancellationTokenSource runCancellation = CancellationTokenSource
+            .CreateLinkedTokenSource(cancellationToken);
+
+        long[] samples = new long[count];
+        int warmupCount = 0;
+        int sampleCount = 0;
+        long allocatedBefore = 0;
+        long allocatedBytes = 0;
+        long totalElapsed = 0;
+
+        input.Run(HandleInput, HandleTiming, runCancellation.Token);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return sampleCount < count
+            ? throw new InvalidOperationException("Raw Input benchmark stopped before collecting enough reports.")
+            : new BenchmarkResult(count, totalElapsed, samples, allocatedBytes);
+
+        static void HandleInput(in VirtualMouseInput input)
+        {
+            _ = input;
+        }
+
+        void HandleTiming(long startedTimestamp, long emittedTimestamp)
+        {
+            if (warmupCount < BenchmarkWarmup)
+            {
+                warmupCount++;
+                if (warmupCount == BenchmarkWarmup)
+                {
+                    allocatedBefore = GC.GetTotalAllocatedBytes(precise: false);
+                }
+
+                return;
+            }
+
+            if (sampleCount >= count)
+            {
+                return;
+            }
+
+            long elapsed = emittedTimestamp - startedTimestamp;
+            samples[sampleCount] = elapsed;
+            totalElapsed += elapsed;
+            sampleCount++;
+
+            if (sampleCount == count)
+            {
+                allocatedBytes = GC.GetTotalAllocatedBytes(precise: false) - allocatedBefore;
+                runCancellation.Cancel();
+            }
+        }
+    }
+
+    internal static BenchmarkResult BenchmarkSourceToViiperApi(
+        MouseReport report,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        VirtualMouseInput input = new(report, string.Empty);
+        BenchmarkViiperApi viiperApi = new();
+        BenchmarkMouse mouse = new(viiperApi);
+        MouseInputHandler handler = HandleInput;
+
+        for (int i = 0; i < BenchmarkWarmup; i++)
+        {
+            handler(in input);
+        }
+
+        long[] samples = new long[count];
+        long allocatedBefore = GC.GetTotalAllocatedBytes(precise: false);
+        long totalElapsed = 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            viiperApi.Reset();
+            long start = Stopwatch.GetTimestamp();
+            handler(in input);
+            long elapsed = viiperApi.LastReceivedTimestamp - start;
+            samples[i] = elapsed;
+            totalElapsed += elapsed;
+        }
+
+        long allocatedBytes = GC.GetTotalAllocatedBytes(precise: false) - allocatedBefore;
+        return new BenchmarkResult(count, totalElapsed, samples, allocatedBytes);
+
+        void HandleInput(in VirtualMouseInput source)
+        {
+            if (CliSteamCommands.TryCreateOutput(in source, SteamMouseMode.Forward, out MouseReport output))
+            {
+                SendSynchronously(mouse, output, cancellationToken);
+            }
+        }
+    }
+
+    private static Option<int?> CreateCountOption()
+    {
+        return new Option<int?>("--count")
+        {
+            Description = $"Measured reports. Default: {BenchmarkCount}.",
+        };
+    }
+
+    private static void SendSynchronously(BenchmarkMouse mouse, MouseReport report, CancellationToken cancellationToken)
+    {
+        ValueTask sendTask = mouse.SendAsync(report, cancellationToken);
+        if (sendTask.IsCompleted)
+        {
+            sendTask.GetAwaiter().GetResult();
+            return;
+        }
+
+        sendTask.AsTask().GetAwaiter().GetResult();
+    }
+
+    private static async Task PrintBenchmarkAsync(string title, BenchmarkResult result)
+    {
+        int count = result.Count;
+        long[] samples = result.Samples;
         Array.Sort(samples);
 
-        double totalMs = ToMilliseconds(totalElapsed);
+        double totalMs = ToMilliseconds(result.TotalElapsed);
         double sendsPerSecond = count / (totalMs / 1000.0);
+        double mouseRateMultiple = sendsPerSecond / 1000.0;
         double averageMs = totalMs / count;
         double middleMs = ToMilliseconds(samples[count / 2]);
         double slow95Ms = ToMilliseconds(samples[(int)Math.Clamp(Math.Ceiling(count * 0.95) - 1, 0, count - 1)]);
         double slow99Ms = ToMilliseconds(samples[(int)Math.Clamp(Math.Ceiling(count * 0.99) - 1, 0, count - 1)]);
         double maxMs = ToMilliseconds(samples[count - 1]);
-        double allocatedBytesPerSend = allocatedBytes / (double)count;
+        double allocatedBytesPerSend = result.AllocatedBytes / (double)count;
 
-        await Console.Out.WriteLineAsync("bench").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"  samples     {count:N0} | warmup {BenchmarkWarmup:N0}").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"  throughput  {sendsPerSecond:N0} Hz").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"  send        avg {averageMs:F3} ms").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"              50% {middleMs:F3} ms").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"              95% {slow95Ms:F3} ms").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"              99% {slow99Ms:F3} ms").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"              max {maxMs:F3} ms").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"  allocation  {allocatedBytesPerSend:F1} B/send").ConfigureAwait(false);
+        await Console.Out.WriteLineAsync(title).ConfigureAwait(false);
+        await Console.Out.WriteLineAsync($"  reports  {count:N0}  warmup {BenchmarkWarmup:N0}").ConfigureAwait(false);
+        await Console.Out.WriteLineAsync($"  rate     {sendsPerSecond:N0}/s  ({mouseRateMultiple:N0}x 1000 Hz)").ConfigureAwait(false);
+        await Console.Out.WriteLineAsync(
+            $"  time     avg {ToMicroseconds(averageMs):F3} us  " +
+            $"50% {ToMicroseconds(middleMs):F3} us  " +
+            $"95% {ToMicroseconds(slow95Ms):F3} us  " +
+            $"99% {ToMicroseconds(slow99Ms):F3} us  " +
+            $"max {ToMicroseconds(maxMs):F3} us").ConfigureAwait(false);
+        await Console.Out.WriteLineAsync($"  alloc    {allocatedBytesPerSend:F1} B/report").ConfigureAwait(false);
     }
 
     private static void AddPositiveValidator(Option<int?> option, string name)
@@ -107,4 +281,49 @@ internal static class CliTestCommands
     {
         return ticks * 1000.0 / Stopwatch.Frequency;
     }
+
+    private static double ToMicroseconds(double milliseconds)
+    {
+        return milliseconds * 1000.0;
+    }
+
+    private sealed class BenchmarkViiperApi
+    {
+        private int checksum;
+
+        public long LastReceivedTimestamp { get; private set; }
+
+        public void Reset()
+        {
+            LastReceivedTimestamp = 0;
+        }
+
+        public void Send(MouseReport report, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ViiperMouseInput input = ViiperPhysicalMouse.MapReport(report);
+
+            LastReceivedTimestamp = Stopwatch.GetTimestamp();
+            checksum ^= input.Dx;
+            checksum ^= input.Dy << 8;
+            checksum ^= input.Wheel << 16;
+            checksum ^= input.Buttons << 24;
+            _ = checksum;
+        }
+    }
+
+    private sealed class BenchmarkMouse(BenchmarkViiperApi viiperApi)
+    {
+        public ValueTask SendAsync(MouseReport report, CancellationToken cancellationToken)
+        {
+            viiperApi.Send(report, cancellationToken);
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    internal readonly record struct BenchmarkResult(
+        int Count,
+        long TotalElapsed,
+        long[] Samples,
+        long AllocatedBytes);
 }

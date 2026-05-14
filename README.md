@@ -7,8 +7,11 @@ Project for physical mouse forwarding transports.
 - `src/PhysicalMouse`: core contracts
 - `src/PhysicalMouse.Viiper`: VIIPER transport
 - `src/PhysicalMouse.Teensy`: Teensy 4.0 transport
+- `src/VirtualMouse`: input contracts
+- `src/VirtualMouse.RawInput`: Windows Raw Input source
 - `tests/PhysicalMouse.Tests`: tests
-- `tools/PhysicalMouse.Cli`: CLI for connection checks, visible motion tests, and send benchmarks
+- `tests/VirtualMouse.Tests`: virtual mouse tests
+- `tools/PhysicalMouse.Cli`: CLI harness
 - `firmware`: microcontroller-side work
 
 ## Scripts
@@ -16,9 +19,7 @@ Project for physical mouse forwarding transports.
 - `.\scripts\build.ps1`
 - `.\scripts\test.ps1`
 - `.\scripts\cli.ps1`
-- `.\scripts\steam.ps1`
-- `.\scripts\builld-testbench.ps1`
 
 ## TODO
 
-- Replace the current single-owner VIIPER session model with a proper broker if concurrent game instances need to share one output mouse cleanly.
+- Replace the current single-owner VIIPER session model with a broker only if concurrent sessions need to share one output mouse.

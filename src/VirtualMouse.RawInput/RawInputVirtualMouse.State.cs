@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
@@ -13,7 +14,10 @@ public sealed partial class RawInputVirtualMouse
     // MARK: State
     // ========================================================================
 
-    private sealed class RunState(MouseInputHandler handler, CancellationToken cancellationToken) : IDisposable
+    private sealed class RunState(
+        MouseInputHandler handler,
+        Action<long, long>? timingHandler,
+        CancellationToken cancellationToken) : IDisposable
     {
         private readonly Dictionary<nint, string> deviceNames = [];
         private MouseButtons currentButtons;
@@ -25,9 +29,10 @@ public sealed partial class RawInputVirtualMouse
         public void HandleRawInput(nint rawInputHandle)
         {
             CancellationToken.ThrowIfCancellationRequested();
+            long startedTimestamp = Stopwatch.GetTimestamp();
             if (TryReadRawInputData(rawInputHandle, out RawInput rawInput))
             {
-                HandleRawInput(rawInput);
+                HandleRawInput(rawInput, startedTimestamp);
             }
 
             DrainRawInputQueue();
@@ -43,7 +48,7 @@ public sealed partial class RawInputVirtualMouse
             }
         }
 
-        private void HandleRawInput(RawInput rawInput)
+        private void HandleRawInput(RawInput rawInput, long startedTimestamp)
         {
             if (rawInput.Header.Type != RawInputMouse)
             {
@@ -62,6 +67,7 @@ public sealed partial class RawInputVirtualMouse
 
             MouseReport report = CreateReport(mouse.ButtonFlags, deltaX, deltaY, wheelDelta);
             VirtualMouseInput input = new(report, GetCachedDeviceName(rawInput.Header.Device));
+            timingHandler?.Invoke(startedTimestamp, Stopwatch.GetTimestamp());
             handler(in input);
         }
 
@@ -162,8 +168,9 @@ public sealed partial class RawInputVirtualMouse
                 for (uint i = 0; i < count; i++)
                 {
                     CancellationToken.ThrowIfCancellationRequested();
+                    long startedTimestamp = Stopwatch.GetTimestamp();
                     RawInput rawInput = Marshal.PtrToStructure<RawInput>(current);
-                    HandleRawInput(rawInput);
+                    HandleRawInput(rawInput, startedTimestamp);
                     current += (int)rawInput.Header.Size;
                 }
             }

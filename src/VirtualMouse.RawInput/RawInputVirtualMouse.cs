@@ -41,13 +41,21 @@ public sealed partial class RawInputVirtualMouse : IVirtualMouse, IDisposable
     /// <inheritdoc />
     public void Run(MouseInputHandler handler, CancellationToken cancellationToken = default)
     {
+        Run(handler, timingHandler: null, cancellationToken);
+    }
+
+    internal void Run(
+        MouseInputHandler handler,
+        Action<long, long>? timingHandler,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(handler);
         if (!IsConnected)
         {
             throw new InvalidOperationException("Mouse input is not connected.");
         }
 
-        RunState state = new(handler, cancellationToken);
+        RunState state = new(handler, timingHandler, cancellationToken);
         if (Interlocked.CompareExchange(ref CurrentState, state, null) is not null)
         {
             throw new InvalidOperationException("Another Raw Input mouse source is already running.");

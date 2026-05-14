@@ -55,6 +55,26 @@ internal static class CliSteamCommands
         };
     }
 
+    internal static bool TryCreateOutput(
+        in VirtualMouseInput source,
+        SteamMouseMode mode,
+        out MouseReport output)
+    {
+        output = MouseReport.Empty;
+        if (IsOwnedDeviceName(source.DeviceName))
+        {
+            return false;
+        }
+
+        output = ApplyMode(source.Report, mode);
+        return !output.IsEmpty;
+    }
+
+    internal static bool IsOwnedDeviceName(string deviceName)
+    {
+        return deviceName.Contains(OwnedDeviceFragment, StringComparison.OrdinalIgnoreCase);
+    }
+
     [SupportedOSPlatform("windows")]
     private static Command CreateBridgeCommand(string name, string description, SteamMouseMode mode)
     {
@@ -76,6 +96,8 @@ internal static class CliSteamCommands
 
         return command;
     }
+
+    private const string OwnedDeviceFragment = "VID_6969&PID_5050";
 }
 
 [SupportedOSPlatform("windows")]
@@ -95,13 +117,7 @@ internal static class SteamNullifier
 
         void HandleInput(in VirtualMouseInput source)
         {
-            if (IsOwnedDeviceName(source.DeviceName))
-            {
-                return;
-            }
-
-            MouseReport output = CliSteamCommands.ApplyMode(source.Report, mode);
-            if (!output.IsEmpty)
+            if (CliSteamCommands.TryCreateOutput(in source, mode, out MouseReport output))
             {
                 SendSynchronously(mouse, output, cancellationToken);
             }
@@ -122,11 +138,4 @@ internal static class SteamNullifier
 
         sendTask.AsTask().GetAwaiter().GetResult();
     }
-
-    private static bool IsOwnedDeviceName(string deviceName)
-    {
-        return deviceName.Contains(OwnedDeviceFragment, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private const string OwnedDeviceFragment = "VID_6969&PID_5050";
 }

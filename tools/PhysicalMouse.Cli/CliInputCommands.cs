@@ -14,15 +14,7 @@ internal static class CliInputCommands
     [SupportedOSPlatform("windows")]
     internal static Command CreateInputCommand()
     {
-        Command command = new("input", "Read mouse input sources.");
-        command.Subcommands.Add(CreateRawCommand());
-        return command;
-    }
-
-    [SupportedOSPlatform("windows")]
-    private static Command CreateRawCommand()
-    {
-        Command command = new("raw", "Read Windows Raw Input mouse reports.");
+        Command command = new("input", "Read Windows Raw Input mouse reports.");
         command.SetAction(async (parseResult, cancellationToken) =>
         {
             _ = parseResult;
@@ -31,7 +23,7 @@ internal static class CliInputCommands
                 .ConnectAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-            await Console.Out.WriteLineAsync("input raw: running. Ctrl+C to stop.").ConfigureAwait(false);
+            await Console.Out.WriteLineAsync("input: running. Ctrl+C to stop.").ConfigureAwait(false);
             RunInput(input, cancellationToken);
         });
 

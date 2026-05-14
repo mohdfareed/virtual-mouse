@@ -92,6 +92,7 @@ Do not set `LangVersion=latest`.
 - Keep tests focused on behavior and mapping, not internal structure.
 - For retained CLI tools, prefer `System.CommandLine` over a hand-rolled parser.
 - CLI output should be concise, aligned, and value-first; avoid prose verdicts and unexplained benchmark jargon.
+- Keep CLI `bench` measurements split by explicit boundaries: `bridge` for source callback to VIIPER API receive, `raw` for Raw Input API read/decode to callback, and `all` for reporting both. Do not fold external VIIPER client/device latency into repository-code latency claims.
 
 ## Logging Rules
 
@@ -106,6 +107,7 @@ Do not set `LangVersion=latest`.
 
 - `scripts/build.ps1`: build the solution
 - `scripts/test.ps1`: run tests
+- `scripts/cli.ps1`: run the CLI harness
 
 ## Documentation Style
 

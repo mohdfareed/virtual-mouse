@@ -1,4 +1,3 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("PhysicalMouse.Tests")]
 [assembly: InternalsVisibleTo("PhysicalMouse.Cli")]
