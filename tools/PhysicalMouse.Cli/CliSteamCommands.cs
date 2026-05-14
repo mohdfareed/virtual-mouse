@@ -1,7 +1,12 @@
 using System;
 using System.CommandLine;
 using System.Runtime.Versioning;
+using System.Threading;
+using System.Threading.Tasks;
 using PhysicalMouse;
+using PhysicalMouse.Viiper;
+using VirtualMouse;
+using VirtualMouse.RawInput;
 
 internal enum SteamMouseMode
 {
@@ -71,4 +76,57 @@ internal static class CliSteamCommands
 
         return command;
     }
+}
+
+[SupportedOSPlatform("windows")]
+internal static class SteamNullifier
+{
+    // MARK: Bridge
+    // ========================================================================
+
+    public static void Run(ViiperPhysicalMouse mouse, SteamMouseMode mode, CancellationToken cancellationToken)
+    {
+        using RawInputVirtualMouse input = RawInputVirtualMouse
+            .ConnectAsync(cancellationToken)
+            .GetAwaiter()
+            .GetResult();
+
+        input.Run(HandleInput, cancellationToken);
+
+        void HandleInput(in VirtualMouseInput source)
+        {
+            if (IsOwnedDeviceName(source.DeviceName))
+            {
+                return;
+            }
+
+            MouseReport output = CliSteamCommands.ApplyMode(source.Report, mode);
+            if (!output.IsEmpty)
+            {
+                SendSynchronously(mouse, output, cancellationToken);
+            }
+        }
+    }
+
+    // MARK: Helpers
+    // ========================================================================
+
+    private static void SendSynchronously(ViiperPhysicalMouse mouse, MouseReport report, CancellationToken cancellationToken)
+    {
+        ValueTask sendTask = mouse.SendAsync(report, cancellationToken);
+        if (sendTask.IsCompleted)
+        {
+            sendTask.GetAwaiter().GetResult();
+            return;
+        }
+
+        sendTask.AsTask().GetAwaiter().GetResult();
+    }
+
+    private static bool IsOwnedDeviceName(string deviceName)
+    {
+        return deviceName.Contains(OwnedDeviceFragment, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private const string OwnedDeviceFragment = "VID_6969&PID_5050";
 }

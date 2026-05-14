@@ -4,10 +4,14 @@
     <Project Path="src/PhysicalMouse/PhysicalMouse.csproj" />
     <Project Path="src/PhysicalMouse.Teensy/PhysicalMouse.Teensy.csproj" />
     <Project Path="src/PhysicalMouse.Viiper/PhysicalMouse.Viiper.csproj" />
+    <Project Path="src/VirtualMouse/VirtualMouse.csproj" />
+    <Project Path="src/VirtualMouse.RawInput/VirtualMouse.RawInput.csproj" />
+    <Project Path="src/VirtualMouse.SteamInput/VirtualMouse.SteamInput.csproj" />
   </Folder>
 
   <Folder Name="/tests/">
     <Project Path="tests/PhysicalMouse.Tests/PhysicalMouse.Tests.csproj" />
+    <Project Path="tests/VirtualMouse.Tests/VirtualMouse.Tests.csproj" />
   </Folder>
 
   <Folder Name="/tools/">

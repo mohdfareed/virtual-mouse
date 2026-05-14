@@ -1,22 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <IsPackable>false</IsPackable>
-    <NoWarn>$(NoWarn);IDE0210</NoWarn>
     <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CA1515</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
-    <PackageReference Include="System.CommandLine" Version="2.0.8" />
+    <PackageReference Include="MSTest" Version="4.0.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PhysicalMouse\PhysicalMouse.csproj" />
-    <ProjectReference Include="..\..\src\PhysicalMouse.Viiper\PhysicalMouse.Viiper.csproj" />
     <ProjectReference Include="..\..\src\VirtualMouse\VirtualMouse.csproj" />
     <ProjectReference Include="..\..\src\VirtualMouse.RawInput\VirtualMouse.RawInput.csproj" />
+    <ProjectReference Include="..\..\src\VirtualMouse.SteamInput\VirtualMouse.SteamInput.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
   </ItemGroup>
 
 </Project>

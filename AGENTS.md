@@ -28,7 +28,11 @@ Do not set `LangVersion=latest`.
 - `src/PhysicalMouse`: shared contracts
 - `src/PhysicalMouse.Viiper`: VIIPER transport
 - `src/PhysicalMouse.Teensy`: Teensy 4.0 transport
+- `src/VirtualMouse`: shared input contracts
+- `src/VirtualMouse.RawInput`: Windows Raw Input source
+- `src/VirtualMouse.SteamInput`: Steam Input source placeholder
 - `tests/PhysicalMouse.Tests`: tests
+- `tests/VirtualMouse.Tests`: virtual mouse tests
 - `tools/PhysicalMouse.Cli`: CLI harness
 - `firmware`: microcontroller-side code
 - `scripts`: repo scripts
@@ -44,12 +48,16 @@ Do not set `LangVersion=latest`.
 - Do not add a shared factory or transport manager unless explicitly requested.
 - Do not add a shared cross-transport options type.
 - `IPhysicalMouse` represents a usable mouse session, not a transport factory.
+- `IVirtualMouse` represents a usable mouse input session.
+- Use direct callbacks for virtual mouse input hot paths; do not add event queues or buffering unless explicitly requested.
+- Push back when a requested change leaks caller responsibility into this repository, expands scope, or adds avoidable hot-path overhead.
 - Treat 1000 Hz mouse-rate input and sub-2-5 ms added latency as hot-path design targets.
 
 ## Current API Direction
 
 - `IPhysicalMouse` is the base connected-session interface.
 - Connection entrypoints should live on concrete transport types.
+- Input connection entrypoints should live on concrete source types.
 - Use transport-specific options types when config becomes large enough to justify them.
 - For tiny related contracts, prefer one file over many small files.
 
@@ -68,6 +76,18 @@ Do not set `LangVersion=latest`.
 
 - Teensy 4.0 is planned but not implemented yet.
 - Placeholders may throw `NotImplementedException` until the transport is designed.
+
+## Steam Input Notes
+
+- Use Steamworks.NET as the C# binding unless there is a concrete reason to switch.
+- Keep Steam API lifecycle ownership explicit; do not silently shut down Steam API if the caller owns it.
+- Follow Valve's action-based Steam Input model; do not build around controller-specific assumptions.
+
+## Raw Input Notes
+
+- Follow Microsoft's documented Raw Input model first.
+- Prefer the performance-oriented documented path over simplifying code by adding per-report allocations or extra native calls.
+- Keep raw input filtering caller-driven; do not bake Steam-specific assumptions into `VirtualMouse.RawInput`.
 
 ## Testing Rules
 

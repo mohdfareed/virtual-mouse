@@ -10,12 +10,13 @@ internal static class Program
     private static Task<int> Main(string[] args)
     {
         RootCommand root = new("Physical mouse transport CLI.");
-        root.Subcommands.Add(CliTestCommands.CreateBenchCommand());
+
         if (OperatingSystem.IsWindows())
         {
             root.Subcommands.Add(CliSteamCommands.CreateSteamCommand());
             root.Subcommands.Add(CliSteamCommands.CreateNullifyCommand());
         }
+        root.Subcommands.Add(CliTestCommands.CreateBenchCommand());
 
         return root.Parse(args).InvokeAsync();
     }

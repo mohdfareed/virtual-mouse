@@ -1,0 +1,153 @@
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Threading;
+using PhysicalMouse;
+
+namespace VirtualMouse.RawInput;
+
+[SupportedOSPlatform("windows")]
+public sealed partial class RawInputVirtualMouse
+{
+    // MARK: State
+    // ========================================================================
+
+    private sealed class RunState(MouseInputHandler handler, CancellationToken cancellationToken) : IDisposable
+    {
+        private readonly Dictionary<nint, string> deviceNames = [];
+        private MouseButtons currentButtons;
+        private nint inputBuffer;
+        private uint inputBufferSize;
+
+        public CancellationToken CancellationToken { get; } = cancellationToken;
+
+        public void HandleRawInput(nint rawInputHandle)
+        {
+            CancellationToken.ThrowIfCancellationRequested();
+            if (!TryReadRawInput(rawInputHandle, out RawInput rawInput) ||
+                rawInput.Header.Type != RawInputMouse)
+            {
+                return;
+            }
+
+            RawMouse mouse = rawInput.Mouse;
+            int deltaX = mouse.LastX;
+            int deltaY = mouse.LastY;
+            int wheelDelta = GetWheelDelta(mouse.ButtonFlags, mouse.ButtonData);
+            bool hasButtonEvent = HasMouseButtonEvent(mouse.ButtonFlags);
+            if (deltaX == 0 && deltaY == 0 && !hasButtonEvent && wheelDelta == 0)
+            {
+                return;
+            }
+
+            MouseReport report = CreateReport(mouse.ButtonFlags, deltaX, deltaY, wheelDelta);
+            VirtualMouseInput input = new(report, GetCachedDeviceName(rawInput.Header.Device));
+            handler(in input);
+        }
+
+        public void Dispose()
+        {
+            if (inputBuffer != nint.Zero)
+            {
+                Marshal.FreeHGlobal(inputBuffer);
+                inputBuffer = nint.Zero;
+                inputBufferSize = 0;
+            }
+        }
+
+        private bool TryReadRawInput(nint rawInputHandle, out RawInput rawInput)
+        {
+            EnsureInputBuffer((uint)RawInputBufferInitialSize);
+
+            uint size = inputBufferSize;
+            int read = NativeMethods.GetRawInputData(
+                rawInputHandle,
+                Input,
+                inputBuffer,
+                ref size,
+                (uint)Marshal.SizeOf<RawInputHeader>());
+
+            if (read < 0)
+            {
+                uint requiredSize = 0;
+                _ = NativeMethods.GetRawInputData(
+                    rawInputHandle,
+                    Input,
+                    nint.Zero,
+                    ref requiredSize,
+                    (uint)Marshal.SizeOf<RawInputHeader>());
+
+                if (requiredSize == 0)
+                {
+                    rawInput = default;
+                    return false;
+                }
+
+                EnsureInputBuffer(requiredSize);
+                size = inputBufferSize;
+                read = NativeMethods.GetRawInputData(
+                    rawInputHandle,
+                    Input,
+                    inputBuffer,
+                    ref size,
+                    (uint)Marshal.SizeOf<RawInputHeader>());
+            }
+
+            if (read < RawInputBufferInitialSize)
+            {
+                rawInput = default;
+                return false;
+            }
+
+            rawInput = Marshal.PtrToStructure<RawInput>(inputBuffer);
+            return true;
+        }
+
+        private void EnsureInputBuffer(uint size)
+        {
+            if (inputBuffer != nint.Zero && inputBufferSize >= size)
+            {
+                return;
+            }
+
+            if (inputBuffer != nint.Zero)
+            {
+                Marshal.FreeHGlobal(inputBuffer);
+            }
+
+            inputBufferSize = Math.Max(size, (uint)RawInputBufferInitialSize);
+            inputBuffer = Marshal.AllocHGlobal((int)inputBufferSize);
+        }
+
+        private string GetCachedDeviceName(nint device)
+        {
+            if (device == nint.Zero)
+            {
+                return string.Empty;
+            }
+
+            if (!deviceNames.TryGetValue(device, out string? deviceName))
+            {
+                deviceName = GetDeviceName(device);
+                deviceNames[device] = deviceName;
+            }
+
+            return deviceName;
+        }
+
+        private MouseReport CreateReport(ushort buttonFlags, int deltaX, int deltaY, int wheelDelta)
+        {
+            if (buttonFlags != 0)
+            {
+                currentButtons = ApplyButton(currentButtons, buttonFlags, 0x0001, 0x0002, MouseButtons.Left);
+                currentButtons = ApplyButton(currentButtons, buttonFlags, 0x0004, 0x0008, MouseButtons.Right);
+                currentButtons = ApplyButton(currentButtons, buttonFlags, 0x0010, 0x0020, MouseButtons.Middle);
+                currentButtons = ApplyButton(currentButtons, buttonFlags, 0x0040, 0x0080, MouseButtons.Back);
+                currentButtons = ApplyButton(currentButtons, buttonFlags, 0x0100, 0x0200, MouseButtons.Forward);
+            }
+
+            return new MouseReport(currentButtons, deltaX, deltaY, wheelDelta);
+        }
+    }
+}

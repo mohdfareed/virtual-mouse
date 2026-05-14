@@ -1,8 +1,10 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
+namespace VirtualMouse.RawInput;
+
 [SupportedOSPlatform("windows")]
-internal static partial class SteamNullifier
+public sealed partial class RawInputVirtualMouse
 {
     private const int RawInputSink = 0x00000100;
     private const int Input = 0x10000003;
@@ -13,6 +15,9 @@ internal static partial class SteamNullifier
     private const int WmInput = 0x00FF;
     private const int RawInputMouse = 0;
     private const int DeviceName = 0x20000007;
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate nint WindowProc(nint hwnd, uint message, nint wParam, nint lParam);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Message
@@ -45,11 +50,8 @@ internal static partial class SteamNullifier
         public nint Icon;
         public nint Cursor;
         public nint Background;
-
         public nint MenuName;
-
         public nint ClassName;
-
         public nint SmallIcon;
     }
 
