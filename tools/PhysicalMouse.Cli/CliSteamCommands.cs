@@ -2,7 +2,6 @@ using System;
 using System.CommandLine;
 using System.Runtime.Versioning;
 using System.Threading;
-using System.Threading.Tasks;
 using PhysicalMouse;
 using PhysicalMouse.Viiper;
 using VirtualMouse;
@@ -42,7 +41,7 @@ internal static class CliSteamCommands
 
     internal static MouseReport Nullify(MouseReport report)
     {
-        return new MouseReport(MouseButtons.None, -report.DeltaX, -report.DeltaY, 0);
+        return MouseReportTransforms.NullifyMovement(report);
     }
 
     internal static MouseReport ApplyMode(MouseReport report, SteamMouseMode mode)
@@ -53,26 +52,6 @@ internal static class CliSteamCommands
             SteamMouseMode.Forward => report,
             _ => throw new ArgumentOutOfRangeException(nameof(mode)),
         };
-    }
-
-    internal static bool TryCreateOutput(
-        in VirtualMouseInput source,
-        SteamMouseMode mode,
-        out MouseReport output)
-    {
-        output = MouseReport.Empty;
-        if (IsOwnedDeviceName(source.DeviceName))
-        {
-            return false;
-        }
-
-        output = ApplyMode(source.Report, mode);
-        return !output.IsEmpty;
-    }
-
-    internal static bool IsOwnedDeviceName(string deviceName)
-    {
-        return deviceName.Contains(OwnedDeviceFragment, StringComparison.OrdinalIgnoreCase);
     }
 
     [SupportedOSPlatform("windows")]
@@ -96,8 +75,6 @@ internal static class CliSteamCommands
 
         return command;
     }
-
-    private const string OwnedDeviceFragment = "VID_6969&PID_5050";
 }
 
 [SupportedOSPlatform("windows")]
@@ -113,29 +90,12 @@ internal static class SteamNullifier
             .GetAwaiter()
             .GetResult();
 
-        input.Run(HandleInput, cancellationToken);
-
-        void HandleInput(in VirtualMouseInput source)
+        if (mode == SteamMouseMode.Forward)
         {
-            if (CliSteamCommands.TryCreateOutput(in source, mode, out MouseReport output))
-            {
-                SendSynchronously(mouse, output, cancellationToken);
-            }
-        }
-    }
-
-    // MARK: Helpers
-    // ========================================================================
-
-    private static void SendSynchronously(ViiperPhysicalMouse mouse, MouseReport report, CancellationToken cancellationToken)
-    {
-        ValueTask sendTask = mouse.SendAsync(report, cancellationToken);
-        if (sendTask.IsCompleted)
-        {
-            sendTask.GetAwaiter().GetResult();
+            input.RunTo(mouse, cancellationToken);
             return;
         }
 
-        sendTask.AsTask().GetAwaiter().GetResult();
+        input.RunTo(mouse, report => CliSteamCommands.ApplyMode(report, mode), cancellationToken);
     }
 }

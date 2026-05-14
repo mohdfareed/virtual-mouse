@@ -66,7 +66,7 @@ public sealed partial class RawInputVirtualMouse
             }
 
             MouseReport report = CreateReport(mouse.ButtonFlags, deltaX, deltaY, wheelDelta);
-            VirtualMouseInput input = new(report, GetCachedDeviceName(rawInput.Header.Device));
+            MouseInput input = new(report, GetCachedDeviceName(rawInput.Header.Device));
             timingHandler?.Invoke(startedTimestamp, Stopwatch.GetTimestamp());
             handler(in input);
         }

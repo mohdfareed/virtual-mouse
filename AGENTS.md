@@ -44,6 +44,7 @@ Do not set `LangVersion=latest`.
 - Do not add buffering, smoothing, batching, retries, or background pipelines unless explicitly requested.
 - Do not introduce latency or side effects in library code beyond what the underlying transport already requires.
 - Keep transport connection APIs transport-specific.
+- Keep source-to-output forwarding on the shared `IVirtualMouse`/`IPhysicalMouse` path; transports should provide filtering through `IPhysicalMouse.FilterInput`.
 - Do not add a shared factory or transport manager unless explicitly requested.
 - Do not add a shared cross-transport options type.
 - `IPhysicalMouse` represents a usable mouse session, not a transport factory.
@@ -51,10 +52,12 @@ Do not set `LangVersion=latest`.
 - Use direct callbacks for virtual mouse input hot paths; do not add event queues or buffering unless explicitly requested.
 - Push back when a requested change leaks caller responsibility into this repository, expands scope, or adds avoidable hot-path overhead.
 - Treat 1000 Hz mouse-rate input and sub-2-5 ms added latency as hot-path design targets.
+- Keep hot-path performance and benchmarkable boundaries as top priorities when shaping shared interfaces and transport code.
 
 ## Current API Direction
 
 - `IPhysicalMouse` is the base connected-session interface.
+- `IPhysicalMouse.FilterInput` is the transport-owned loopback/source filter used by shared forwarding.
 - Connection entrypoints should live on concrete transport types.
 - Input connection entrypoints should live on concrete source types.
 - Use transport-specific options types when config becomes large enough to justify them.
@@ -83,6 +86,7 @@ Do not set `LangVersion=latest`.
 - Prefer the performance-oriented documented path over simplifying code by adding per-report allocations or extra native calls.
 - In a `WM_INPUT` handler, read the current event from `lParam` with `GetRawInputData`, then use `GetRawInputBuffer` only to drain additional queued events.
 - Keep raw input filtering caller-driven; do not bake Steam-specific assumptions into `VirtualMouse.RawInput`.
+- Put durable source/transport interop logic in `src`; CLI tools should orchestrate and display results, not own reusable forwarding rules.
 
 ## Testing Rules
 

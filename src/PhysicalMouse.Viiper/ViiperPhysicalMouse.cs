@@ -2,8 +2,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using global::Viiper.Client;
-using global::Viiper.Client.Devices.Mouse;
 using Microsoft.Extensions.Logging;
+using ViiperMouseInput = global::Viiper.Client.Devices.Mouse.MouseInput;
 
 namespace PhysicalMouse.Viiper;
 
@@ -75,6 +75,12 @@ public sealed partial class ViiperPhysicalMouse : IPhysicalMouse, IDisposable, I
         return new ValueTask(device.SendAsync(MapReport(report), cancellationToken));
     }
 
+    /// <inheritdoc />
+    public bool FilterInput(in MouseInput input)
+    {
+        return input.DeviceName?.Contains(OwnedDeviceNameFragment, StringComparison.OrdinalIgnoreCase) != true;
+    }
+
     // MARK: Disposal
     // ========================================================================
 
@@ -117,10 +123,10 @@ public sealed partial class ViiperPhysicalMouse : IPhysicalMouse, IDisposable, I
     // MARK: Internal
     // ========================================================================
 
-    internal static MouseInput MapReport(MouseReport report)
+    internal static ViiperMouseInput MapReport(MouseReport report)
     {
         // keep the mapping direct and fail on unsupported ranges
-        return new MouseInput
+        return new ViiperMouseInput
         {
             Buttons = checked((byte)report.Buttons),
             Dx = checked((short)report.DeltaX),

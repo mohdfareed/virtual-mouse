@@ -1,5 +1,3 @@
-using VirtualMouse;
-
 namespace PhysicalMouse.Tests;
 
 /// <summary>Tests for Steam CLI helpers.</summary>
@@ -31,34 +29,4 @@ public sealed class CliSteamCommandsTests
         Assert.AreEqual(report, forwarded);
     }
 
-    /// <summary>Checks owned VIIPER device filtering.</summary>
-    [TestMethod]
-    public void TryCreateOutputSkipsOwnedViiperDevice()
-    {
-        MouseReport report = new(MouseButtons.None, 1, 0, 0);
-        VirtualMouseInput input = new(report, @"\\?\HID#VID_6969&PID_5050#1");
-
-        bool hasOutput = CliSteamCommands.TryCreateOutput(
-            in input,
-            SteamMouseMode.Forward,
-            out MouseReport output);
-
-        Assert.IsFalse(hasOutput);
-        Assert.AreEqual(MouseReport.Empty, output);
-    }
-
-    /// <summary>Checks empty input filtering.</summary>
-    [TestMethod]
-    public void TryCreateOutputSkipsEmptyReport()
-    {
-        VirtualMouseInput input = new(MouseReport.Empty, string.Empty);
-
-        bool hasOutput = CliSteamCommands.TryCreateOutput(
-            in input,
-            SteamMouseMode.Forward,
-            out MouseReport output);
-
-        Assert.IsFalse(hasOutput);
-        Assert.AreEqual(MouseReport.Empty, output);
-    }
 }

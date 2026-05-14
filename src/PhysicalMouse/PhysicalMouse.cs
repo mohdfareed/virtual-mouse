@@ -10,6 +10,13 @@ public interface IPhysicalMouse : IAsyncDisposable
     /// <summary>Gets whether the transport is connected.</summary>
     bool IsConnected { get; }
 
+    /// <summary>Returns whether the input should be forwarded to this transport.</summary>
+    /// <param name="input">Mouse input.</param>
+    bool FilterInput(in MouseInput input)
+    {
+        return true;
+    }
+
     /// <summary>Sends one mouse report.</summary>
     /// <param name="report">Report to send.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -54,4 +61,19 @@ public readonly record struct MouseReport(
         DeltaX == 0 &&
         DeltaY == 0 &&
         WheelDelta == 0;
+}
+
+/// <summary>Mouse input from one source.</summary>
+/// <param name="Report">Mouse report.</param>
+/// <param name="DeviceName">Source device name, when known.</param>
+public readonly record struct MouseInput(MouseReport Report, string DeviceName);
+
+/// <summary>Common mouse report transforms.</summary>
+public static class MouseReportTransforms
+{
+    /// <summary>Returns opposite movement with no button or wheel input.</summary>
+    public static MouseReport NullifyMovement(MouseReport report)
+    {
+        return new MouseReport(MouseButtons.None, -report.DeltaX, -report.DeltaY, 0);
+    }
 }

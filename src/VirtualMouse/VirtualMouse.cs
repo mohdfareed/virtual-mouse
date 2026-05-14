@@ -18,9 +18,4 @@ public interface IVirtualMouse : IAsyncDisposable
 
 /// <summary>Handles one mouse input report.</summary>
 /// <param name="input">Mouse input.</param>
-public delegate void MouseInputHandler(in VirtualMouseInput input);
-
-/// <summary>Mouse input from one source.</summary>
-/// <param name="Report">Mouse report.</param>
-/// <param name="DeviceName">Source device name, when known.</param>
-public readonly record struct VirtualMouseInput(MouseReport Report, string DeviceName);
+public delegate void MouseInputHandler(in MouseInput input);

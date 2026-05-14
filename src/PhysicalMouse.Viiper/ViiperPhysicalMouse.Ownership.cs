@@ -12,6 +12,7 @@ public sealed partial class ViiperPhysicalMouse
     internal const ushort OwnedVendorId = 0x6969;
     internal const ushort OwnedProductId = 0x5050;
     internal const string OwnershipMutexName = @"Local\PhysicalMouse.Viiper";
+    private const string OwnedDeviceNameFragment = "VID_6969&PID_5050";
 
     // MARK: Ownership
     // ========================================================================

@@ -40,7 +40,7 @@ internal static class CliInputCommands
 
         input.Run(HandleInput, cancellationToken);
 
-        void HandleInput(in VirtualMouseInput source)
+        void HandleInput(in MouseInput source)
         {
             MouseButtons pressed = source.Report.Buttons & ~previousButtons;
             MouseButtons released = previousButtons & ~source.Report.Buttons;

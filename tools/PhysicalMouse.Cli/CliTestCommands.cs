@@ -13,6 +13,7 @@ using ViiperMouseInput = global::Viiper.Client.Devices.Mouse.MouseInput;
 internal static class CliTestCommands
 {
     private const int BenchmarkCount = 10_000;
+    private const int RawBenchmarkCount = 1_000;
     private const int BenchmarkWarmup = 1_000;
 
     // MARK: Commands
@@ -21,7 +22,7 @@ internal static class CliTestCommands
     internal static Command CreateBenchCommand()
     {
         Command command = new("bench", "Measure repository mouse forwarding cost.");
-        Option<int?> countOption = CreateCountOption();
+        Option<int?> countOption = CreateCountOption(BenchmarkCount);
 
         command.Options.Add(countOption);
         AddPositiveValidator(countOption, "--count");
@@ -44,7 +45,7 @@ internal static class CliTestCommands
     private static Command CreateBridgeBenchCommand()
     {
         Command command = new("bridge", "Measure callback to VIIPER API boundary.");
-        Option<int?> countOption = CreateCountOption();
+        Option<int?> countOption = CreateCountOption(BenchmarkCount);
 
         command.Options.Add(countOption);
         AddPositiveValidator(countOption, "--count");
@@ -61,14 +62,14 @@ internal static class CliTestCommands
     private static Command CreateRawBenchCommand()
     {
         Command command = new("raw", "Measure Raw Input read/decode to callback boundary.");
-        Option<int?> countOption = CreateCountOption();
+        Option<int?> countOption = CreateCountOption(RawBenchmarkCount);
 
         command.Options.Add(countOption);
         AddPositiveValidator(countOption, "--count");
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            int count = parseResult.GetValue(countOption) ?? BenchmarkCount;
+            int count = parseResult.GetValue(countOption) ?? RawBenchmarkCount;
             await RunRawBenchAsync(count, cancellationToken).ConfigureAwait(false);
         });
 
@@ -78,14 +79,14 @@ internal static class CliTestCommands
     private static Command CreateAllBenchCommand()
     {
         Command command = new("all", "Measure Raw Input and bridge boundaries.");
-        Option<int?> countOption = CreateCountOption();
+        Option<int?> countOption = CreateCountOption(RawBenchmarkCount);
 
         command.Options.Add(countOption);
         AddPositiveValidator(countOption, "--count");
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            int count = parseResult.GetValue(countOption) ?? BenchmarkCount;
+            int count = parseResult.GetValue(countOption) ?? RawBenchmarkCount;
             await RunBridgeBenchAsync(count, cancellationToken).ConfigureAwait(false);
             await RunRawBenchAsync(count, cancellationToken).ConfigureAwait(false);
         });
@@ -109,7 +110,8 @@ internal static class CliTestCommands
         }
 
         await Console.Out.WriteLineAsync(
-            $"bench raw: move the mouse until {count:N0} reports are collected.").ConfigureAwait(false);
+            $"bench raw: move the mouse until warmup {BenchmarkWarmup:N0} + reports {count:N0} are collected.")
+            .ConfigureAwait(false);
 
         BenchmarkResult benchmark = await BenchmarkRawInputAsync(count, cancellationToken).ConfigureAwait(false);
         await PrintBenchmarkAsync("bench raw api->callback", benchmark).ConfigureAwait(false);
@@ -129,18 +131,31 @@ internal static class CliTestCommands
         long[] samples = new long[count];
         int warmupCount = 0;
         int sampleCount = 0;
-        long allocatedBefore = 0;
-        long allocatedBytes = 0;
         long totalElapsed = 0;
+        using CancellationTokenSource progressCancellation = CancellationTokenSource
+            .CreateLinkedTokenSource(runCancellation.Token);
+        Task progressTask = PrintRawProgressAsync(
+            () => Volatile.Read(ref warmupCount),
+            () => Volatile.Read(ref sampleCount),
+            count,
+            progressCancellation.Token);
 
-        input.Run(HandleInput, HandleTiming, runCancellation.Token);
-        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            input.Run(HandleInput, HandleTiming, runCancellation.Token);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        finally
+        {
+            await progressCancellation.CancelAsync().ConfigureAwait(false);
+            await progressTask.ConfigureAwait(false);
+        }
 
         return sampleCount < count
             ? throw new InvalidOperationException("Raw Input benchmark stopped before collecting enough reports.")
-            : new BenchmarkResult(count, totalElapsed, samples, allocatedBytes);
+            : new BenchmarkResult(count, totalElapsed, samples, -1);
 
-        static void HandleInput(in VirtualMouseInput input)
+        static void HandleInput(in MouseInput input)
         {
             _ = input;
         }
@@ -150,11 +165,6 @@ internal static class CliTestCommands
             if (warmupCount < BenchmarkWarmup)
             {
                 warmupCount++;
-                if (warmupCount == BenchmarkWarmup)
-                {
-                    allocatedBefore = GC.GetTotalAllocatedBytes(precise: false);
-                }
-
                 return;
             }
 
@@ -170,7 +180,6 @@ internal static class CliTestCommands
 
             if (sampleCount == count)
             {
-                allocatedBytes = GC.GetTotalAllocatedBytes(precise: false) - allocatedBefore;
                 runCancellation.Cancel();
             }
         }
@@ -181,7 +190,7 @@ internal static class CliTestCommands
         int count,
         CancellationToken cancellationToken)
     {
-        VirtualMouseInput input = new(report, string.Empty);
+        MouseInput input = new(report, string.Empty);
         BenchmarkViiperApi viiperApi = new();
         BenchmarkMouse mouse = new(viiperApi);
         MouseInputHandler handler = HandleInput;
@@ -208,20 +217,20 @@ internal static class CliTestCommands
         long allocatedBytes = GC.GetTotalAllocatedBytes(precise: false) - allocatedBefore;
         return new BenchmarkResult(count, totalElapsed, samples, allocatedBytes);
 
-        void HandleInput(in VirtualMouseInput source)
+        void HandleInput(in MouseInput source)
         {
-            if (CliSteamCommands.TryCreateOutput(in source, SteamMouseMode.Forward, out MouseReport output))
+            if (!source.Report.IsEmpty)
             {
-                SendSynchronously(mouse, output, cancellationToken);
+                SendSynchronously(mouse, source.Report, cancellationToken);
             }
         }
     }
 
-    private static Option<int?> CreateCountOption()
+    private static Option<int?> CreateCountOption(int defaultCount)
     {
         return new Option<int?>("--count")
         {
-            Description = $"Measured reports. Default: {BenchmarkCount}.",
+            Description = $"Measured reports. Default: {defaultCount}.",
         };
     }
 
@@ -262,7 +271,34 @@ internal static class CliTestCommands
             $"95% {ToMicroseconds(slow95Ms):F3} us  " +
             $"99% {ToMicroseconds(slow99Ms):F3} us  " +
             $"max {ToMicroseconds(maxMs):F3} us").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"  alloc    {allocatedBytesPerSend:F1} B/report").ConfigureAwait(false);
+        await Console.Out.WriteLineAsync(
+            result.AllocatedBytes < 0
+                ? "  alloc    n/a"
+                : $"  alloc    {allocatedBytesPerSend:F1} B/report").ConfigureAwait(false);
+    }
+
+    private static async Task PrintRawProgressAsync(
+        Func<int> getWarmupCount,
+        Func<int> getSampleCount,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        using PeriodicTimer timer = new(TimeSpan.FromSeconds(1));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                int warmupCount = Math.Min(getWarmupCount(), BenchmarkWarmup);
+                int sampleCount = Math.Min(getSampleCount(), count);
+                await Console.Out.WriteLineAsync(
+                    $"  progress warmup {warmupCount:N0}/{BenchmarkWarmup:N0}  reports {sampleCount:N0}/{count:N0}")
+                    .ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
     }
 
     private static void AddPositiveValidator(Option<int?> option, string name)
