@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Steamworks;
@@ -8,7 +9,8 @@ namespace VirtualMouse.SteamInput;
 
 /// <summary>Steam Input source options.</summary>
 /// <param name="InitializeSteamApi">Whether this source owns Steam API initialization.</param>
-public sealed record SteamInputOptions(bool InitializeSteamApi)
+/// <param name="ActionManifestPath">Action manifest path override.</param>
+public sealed record SteamInputOptions(bool InitializeSteamApi, string? ActionManifestPath = null)
 {
     /// <summary>Default options.</summary>
     public static SteamInputOptions Default { get; } = new(InitializeSteamApi: true);
@@ -52,6 +54,18 @@ public sealed class SteamInputVirtualMouse : IVirtualMouse, IDisposable
             }
 
             throw new InvalidOperationException("Could not initialize Steam Input.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.ActionManifestPath) &&
+            !SteamworksInput.SetInputActionManifestFilePath(Path.GetFullPath(options.ActionManifestPath)))
+        {
+            _ = SteamworksInput.Shutdown();
+            if (options.InitializeSteamApi)
+            {
+                SteamAPI.Shutdown();
+            }
+
+            throw new InvalidOperationException("Could not set Steam Input action manifest path.");
         }
 
 #pragma warning disable CA2000 // Ownership transfers to the caller.

@@ -82,6 +82,7 @@ Do not set `LangVersion=latest`.
 ## Steam Input Notes
 
 - Use Steamworks.NET as the C# binding unless there is a concrete reason to switch.
+- Steamworks.NET is the managed wrapper only; keep a native Steamworks runtime dependency so `steam_api64.dll` is published with Steam Input tools.
 - Keep Steam API lifecycle ownership explicit; do not silently shut down Steam API if the caller owns it.
 - Follow Valve's action-based Steam Input model; do not build around controller-specific assumptions.
 - Keep the Steam Input testbench interactive and use the launcher executable for Steam non-Steam shortcuts so each run refreshes the testbench build.

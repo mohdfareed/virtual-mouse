@@ -1,39 +1,68 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.Threading.Tasks;
 
 internal static class Program
 {
+    private static readonly SteamInputBench SteamInput = new();
+
     // MARK: Entry
     // ========================================================================
 
     private static async Task<int> Main()
     {
-        await Console.Out.WriteLineAsync("steam input testbench").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync("type 'help' for commands, 'exit' to quit.").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync().ConfigureAwait(false);
-
-        while (true)
+        try
         {
-            await Console.Out.WriteAsync("steam> ").ConfigureAwait(false);
-            string? input = await Console.In.ReadLineAsync().ConfigureAwait(false);
-            if (input is null)
-            {
-                return 0;
-            }
+            await Console.Out.WriteLineAsync("steam input testbench").ConfigureAwait(false);
+            await Console.Out.WriteLineAsync("type 'help' for commands, 'exit' to quit.").ConfigureAwait(false);
+            await Console.Out.WriteLineAsync().ConfigureAwait(false);
 
-            string command = input.Trim();
-            if (command.Length == 0)
+            while (true)
             {
-                continue;
-            }
+                await Console.Out.WriteAsync("steam> ").ConfigureAwait(false);
+                string? input = await Console.In.ReadLineAsync().ConfigureAwait(false);
+                if (input is null)
+                {
+                    return 0;
+                }
 
-            if (IsExit(command))
-            {
-                return 0;
-            }
+                string command = input.Trim();
+                if (command.Length == 0)
+                {
+                    continue;
+                }
 
-            await RunCommandAsync(command).ConfigureAwait(false);
+                if (IsExit(command))
+                {
+                    return 0;
+                }
+
+                try
+                {
+                    await RunCommandAsync(command).ConfigureAwait(false);
+                }
+                catch (DllNotFoundException exception)
+                {
+                    await PrintCommandErrorAsync(exception).ConfigureAwait(false);
+                }
+                catch (BadImageFormatException exception)
+                {
+                    await PrintCommandErrorAsync(exception).ConfigureAwait(false);
+                }
+                catch (InvalidOperationException exception)
+                {
+                    await PrintCommandErrorAsync(exception).ConfigureAwait(false);
+                }
+                catch (NotSupportedException exception)
+                {
+                    await PrintCommandErrorAsync(exception).ConfigureAwait(false);
+                }
+            }
+        }
+        finally
+        {
+            await SteamInput.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -60,6 +89,18 @@ internal static class Program
             return;
         }
 
+        if (command.Equals("init", StringComparison.OrdinalIgnoreCase))
+        {
+            await SteamInput.InitializeAsync().ConfigureAwait(false);
+            return;
+        }
+
+        if (command.Equals("left", StringComparison.OrdinalIgnoreCase))
+        {
+            await SteamInput.WatchLeftAsync().ConfigureAwait(false);
+            return;
+        }
+
         await Console.Out.WriteLineAsync($"unknown command: {command}").ConfigureAwait(false);
     }
 
@@ -68,7 +109,15 @@ internal static class Program
         await Console.Out.WriteLineAsync("commands").ConfigureAwait(false);
         await Console.Out.WriteLineAsync("  hello   prints a simple launch sanity check").ConfigureAwait(false);
         await Console.Out.WriteLineAsync("  launch  prints process and Steam-related environment info").ConfigureAwait(false);
+        await Console.Out.WriteLineAsync("  init    loads the test action manifest").ConfigureAwait(false);
+        await Console.Out.WriteLineAsync("  left    watches the MouseLeft digital action").ConfigureAwait(false);
         await Console.Out.WriteLineAsync("  exit    quits").ConfigureAwait(false);
+    }
+
+    private static async Task PrintCommandErrorAsync(Exception exception)
+    {
+        await Console.Error.WriteLineAsync($"error: {exception.GetType().Name}: {exception.Message}")
+            .ConfigureAwait(false);
     }
 
     private static async Task PrintLaunchInfoAsync()
@@ -77,8 +126,8 @@ internal static class Program
         await Console.Out.WriteLineAsync($"process     {process.ProcessName} ({process.Id})").ConfigureAwait(false);
         await Console.Out.WriteLineAsync($"cwd         {Environment.CurrentDirectory}").ConfigureAwait(false);
         await Console.Out.WriteLineAsync($"base        {AppContext.BaseDirectory}").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"SteamAppId  {DisplayEnvironmentValue("SteamAppId")}").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync($"SteamGameId {DisplayEnvironmentValue("SteamGameId")}").ConfigureAwait(false);
+        await Console.Out.WriteLineAsync($"SteamAppId  {DisplaySteamId("SteamAppId")}").ConfigureAwait(false);
+        await Console.Out.WriteLineAsync($"SteamGameId {DisplaySteamId("SteamGameId")}").ConfigureAwait(false);
     }
 
     private static bool IsExit(string command)
@@ -91,5 +140,18 @@ internal static class Program
     {
         string? value = Environment.GetEnvironmentVariable(name);
         return string.IsNullOrWhiteSpace(value) ? "(not set)" : value;
+    }
+
+    private static string DisplaySteamId(string name)
+    {
+        string display = DisplayEnvironmentValue(name);
+        if (display == "(not set)" || !ulong.TryParse(display, out ulong value))
+        {
+            return display;
+        }
+
+        string signed32 = value <= int.MaxValue ? ((int)value).ToString(CultureInfo.InvariantCulture) : "overflow";
+        string unsigned32 = value <= uint.MaxValue ? ((uint)value).ToString(CultureInfo.InvariantCulture) : "overflow";
+        return $"{display} (uint32={unsigned32}, int32={signed32})";
     }
 }

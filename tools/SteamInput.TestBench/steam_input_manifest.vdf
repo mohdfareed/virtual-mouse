@@ -1,0 +1,28 @@
+"Action Manifest"
+{
+    "configurations"
+    {
+    }
+
+    "actions"
+    {
+        "Mouse"
+        {
+            "title" "#Set_Mouse"
+
+            "Button"
+            {
+                "MouseLeft" "#Action_MouseLeft"
+            }
+        }
+    }
+
+    "localization"
+    {
+        "english"
+        {
+            "Set_Mouse" "Mouse"
+            "Action_MouseLeft" "Left Click"
+        }
+    }
+}
