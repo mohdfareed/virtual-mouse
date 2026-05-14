@@ -13,6 +13,7 @@ internal static class Program
 
         if (OperatingSystem.IsWindows())
         {
+            root.Subcommands.Add(CliInputCommands.CreateInputCommand());
             root.Subcommands.Add(CliSteamCommands.CreateSteamCommand());
             root.Subcommands.Add(CliSteamCommands.CreateNullifyCommand());
         }

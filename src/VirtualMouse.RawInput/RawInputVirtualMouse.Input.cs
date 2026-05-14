@@ -8,6 +8,7 @@ namespace VirtualMouse.RawInput;
 public sealed partial class RawInputVirtualMouse
 {
     private static readonly int RawInputBufferInitialSize = Marshal.SizeOf<RawInput>();
+    private static readonly uint RawInputBufferInitialCapacity = (uint)(RawInputBufferInitialSize * 64);
 
     // MARK: Input
     // ========================================================================

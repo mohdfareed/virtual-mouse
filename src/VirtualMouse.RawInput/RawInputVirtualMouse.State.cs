@@ -25,8 +25,27 @@ public sealed partial class RawInputVirtualMouse
         public void HandleRawInput(nint rawInputHandle)
         {
             CancellationToken.ThrowIfCancellationRequested();
-            if (!TryReadRawInput(rawInputHandle, out RawInput rawInput) ||
-                rawInput.Header.Type != RawInputMouse)
+            if (TryReadRawInputData(rawInputHandle, out RawInput rawInput))
+            {
+                HandleRawInput(rawInput);
+            }
+
+            DrainRawInputQueue();
+        }
+
+        public void Dispose()
+        {
+            if (inputBuffer != nint.Zero)
+            {
+                Marshal.FreeHGlobal(inputBuffer);
+                inputBuffer = nint.Zero;
+                inputBufferSize = 0;
+            }
+        }
+
+        private void HandleRawInput(RawInput rawInput)
+        {
+            if (rawInput.Header.Type != RawInputMouse)
             {
                 return;
             }
@@ -46,29 +65,60 @@ public sealed partial class RawInputVirtualMouse
             handler(in input);
         }
 
-        public void Dispose()
+        private bool TryReadRawInputBuffer(out uint count)
         {
-            if (inputBuffer != nint.Zero)
+            EnsureInputBuffer(RawInputBufferInitialCapacity);
+
+            uint size = inputBufferSize;
+            count = NativeMethods.GetRawInputBuffer(
+                inputBuffer,
+                ref size,
+                (uint)Marshal.SizeOf<RawInputHeader>());
+
+            if (count == uint.MaxValue)
             {
-                Marshal.FreeHGlobal(inputBuffer);
-                inputBuffer = nint.Zero;
-                inputBufferSize = 0;
+                uint requiredSize = 0;
+                _ = NativeMethods.GetRawInputBuffer(
+                    nint.Zero,
+                    ref requiredSize,
+                    (uint)Marshal.SizeOf<RawInputHeader>());
+
+                if (requiredSize == 0 || requiredSize <= inputBufferSize)
+                {
+                    count = 0;
+                    return false;
+                }
+
+                EnsureInputBuffer(requiredSize);
+                size = inputBufferSize;
+                count = NativeMethods.GetRawInputBuffer(
+                    inputBuffer,
+                    ref size,
+                    (uint)Marshal.SizeOf<RawInputHeader>());
             }
+
+            if (count == uint.MaxValue)
+            {
+                count = 0;
+                return false;
+            }
+
+            return count > 0;
         }
 
-        private bool TryReadRawInput(nint rawInputHandle, out RawInput rawInput)
+        private bool TryReadRawInputData(nint rawInputHandle, out RawInput rawInput)
         {
             EnsureInputBuffer((uint)RawInputBufferInitialSize);
 
             uint size = inputBufferSize;
-            int read = NativeMethods.GetRawInputData(
+            uint read = NativeMethods.GetRawInputData(
                 rawInputHandle,
                 Input,
                 inputBuffer,
                 ref size,
                 (uint)Marshal.SizeOf<RawInputHeader>());
 
-            if (read < 0)
+            if (read == uint.MaxValue)
             {
                 uint requiredSize = 0;
                 _ = NativeMethods.GetRawInputData(
@@ -94,7 +144,7 @@ public sealed partial class RawInputVirtualMouse
                     (uint)Marshal.SizeOf<RawInputHeader>());
             }
 
-            if (read < RawInputBufferInitialSize)
+            if (read == uint.MaxValue || read < RawInputBufferInitialSize)
             {
                 rawInput = default;
                 return false;
@@ -102,6 +152,21 @@ public sealed partial class RawInputVirtualMouse
 
             rawInput = Marshal.PtrToStructure<RawInput>(inputBuffer);
             return true;
+        }
+
+        private void DrainRawInputQueue()
+        {
+            while (TryReadRawInputBuffer(out uint count))
+            {
+                nint current = inputBuffer;
+                for (uint i = 0; i < count; i++)
+                {
+                    CancellationToken.ThrowIfCancellationRequested();
+                    RawInput rawInput = Marshal.PtrToStructure<RawInput>(current);
+                    HandleRawInput(rawInput);
+                    current += (int)rawInput.Header.Size;
+                }
+            }
         }
 
         private void EnsureInputBuffer(uint size)

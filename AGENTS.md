@@ -87,6 +87,7 @@ Do not set `LangVersion=latest`.
 
 - Follow Microsoft's documented Raw Input model first.
 - Prefer the performance-oriented documented path over simplifying code by adding per-report allocations or extra native calls.
+- In a `WM_INPUT` handler, read the current event from `lParam` with `GetRawInputData`, then use `GetRawInputBuffer` only to drain additional queued events.
 - Keep raw input filtering caller-driven; do not bake Steam-specific assumptions into `VirtualMouse.RawInput`.
 
 ## Testing Rules

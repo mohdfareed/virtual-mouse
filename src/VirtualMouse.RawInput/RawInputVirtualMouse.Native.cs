@@ -126,7 +126,11 @@ public sealed partial class RawInputVirtualMouse
 
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [LibraryImport("user32.dll", SetLastError = true)]
-        public static partial int GetRawInputData(nint rawInput, uint command, nint data, ref uint size, uint headerSize);
+        public static partial uint GetRawInputBuffer(nint data, ref uint size, uint headerSize);
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [LibraryImport("user32.dll", SetLastError = true)]
+        public static partial uint GetRawInputData(nint rawInput, uint command, nint data, ref uint size, uint headerSize);
 
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [LibraryImport("user32.dll", EntryPoint = "GetRawInputDeviceInfoW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
