@@ -75,10 +75,12 @@ public sealed partial class ViiperPhysicalMouse : IPhysicalMouse, IDisposable, I
         return new ValueTask(device.SendAsync(MapReport(report), cancellationToken));
     }
 
-    /// <inheritdoc />
+    /// <summary>Returns whether the input should be forwarded to this transport.</summary>
+    /// <param name="input">Mouse input.</param>
+    /// <remarks>This filter prevents loopback input issues.</remarks>
     public bool FilterInput(in MouseInput input)
     {
-        return input.DeviceName?.Contains(OwnedDeviceNameFragment, StringComparison.OrdinalIgnoreCase) != true;
+        return !IsOwnedDeviceName(input.DeviceName);
     }
 
     // MARK: Disposal

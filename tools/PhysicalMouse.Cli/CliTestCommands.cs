@@ -15,6 +15,7 @@ internal static class CliTestCommands
     private const int BenchmarkCount = 10_000;
     private const int RawBenchmarkCount = 1_000;
     private const int BenchmarkWarmup = 1_000;
+    private const double BridgeP99FailureMicroseconds = 10.0;
 
     // MARK: Commands
     // ========================================================================
@@ -99,6 +100,7 @@ internal static class CliTestCommands
         MouseReport report = new(MouseButtons.None, 1, 0, 0);
         BenchmarkResult benchmark = BenchmarkSourceToViiperApi(report, count, cancellationToken);
         await PrintBenchmarkAsync("bench bridge source->viiper-api", benchmark).ConfigureAwait(false);
+        FailBridgeBenchmarkIfSlow(benchmark);
     }
 
     private static async Task RunRawBenchAsync(int count, CancellationToken cancellationToken)
@@ -191,39 +193,22 @@ internal static class CliTestCommands
         CancellationToken cancellationToken)
     {
         MouseInput input = new(report, string.Empty);
-        BenchmarkViiperApi viiperApi = new();
-        BenchmarkMouse mouse = new(viiperApi);
-        MouseInputHandler handler = HandleInput;
-
-        for (int i = 0; i < BenchmarkWarmup; i++)
-        {
-            handler(in input);
-        }
+        BenchmarkTiming warmupTiming = new(null);
+        BenchmarkViiperApi warmupViiperApi = new(warmupTiming);
+        using BenchmarkPhysicalMouse warmupMouse = new(warmupViiperApi);
+        using BenchmarkVirtualMouse warmupSource = new(input, BenchmarkWarmup, warmupTiming);
+        warmupSource.RunTo(warmupMouse, cancellationToken);
 
         long[] samples = new long[count];
+        BenchmarkTiming timing = new(samples);
+        BenchmarkViiperApi viiperApi = new(timing);
+        using BenchmarkPhysicalMouse mouse = new(viiperApi);
+        using BenchmarkVirtualMouse source = new(input, count, timing);
         long allocatedBefore = GC.GetTotalAllocatedBytes(precise: false);
-        long totalElapsed = 0;
-
-        for (int i = 0; i < count; i++)
-        {
-            viiperApi.Reset();
-            long start = Stopwatch.GetTimestamp();
-            handler(in input);
-            long elapsed = viiperApi.LastReceivedTimestamp - start;
-            samples[i] = elapsed;
-            totalElapsed += elapsed;
-        }
+        source.RunTo(mouse, cancellationToken);
 
         long allocatedBytes = GC.GetTotalAllocatedBytes(precise: false) - allocatedBefore;
-        return new BenchmarkResult(count, totalElapsed, samples, allocatedBytes);
-
-        void HandleInput(in MouseInput source)
-        {
-            if (!source.Report.IsEmpty)
-            {
-                SendSynchronously(mouse, source.Report, cancellationToken);
-            }
-        }
+        return new BenchmarkResult(count, timing.TotalElapsed, samples, allocatedBytes);
     }
 
     private static Option<int?> CreateCountOption(int defaultCount)
@@ -232,18 +217,6 @@ internal static class CliTestCommands
         {
             Description = $"Measured reports. Default: {defaultCount}.",
         };
-    }
-
-    private static void SendSynchronously(BenchmarkMouse mouse, MouseReport report, CancellationToken cancellationToken)
-    {
-        ValueTask sendTask = mouse.SendAsync(report, cancellationToken);
-        if (sendTask.IsCompleted)
-        {
-            sendTask.GetAwaiter().GetResult();
-            return;
-        }
-
-        sendTask.AsTask().GetAwaiter().GetResult();
     }
 
     private static async Task PrintBenchmarkAsync(string title, BenchmarkResult result)
@@ -275,6 +248,20 @@ internal static class CliTestCommands
             result.AllocatedBytes < 0
                 ? "  alloc    n/a"
                 : $"  alloc    {allocatedBytesPerSend:F1} B/report").ConfigureAwait(false);
+    }
+
+    private static void FailBridgeBenchmarkIfSlow(BenchmarkResult result)
+    {
+        long[] samples = result.Samples;
+        Array.Sort(samples);
+
+        double slow99Ms = ToMilliseconds(samples[(int)Math.Clamp(Math.Ceiling(result.Count * 0.99) - 1, 0, result.Count - 1)]);
+        double slow99Us = ToMicroseconds(slow99Ms);
+        if (slow99Us > BridgeP99FailureMicroseconds)
+        {
+            throw new InvalidOperationException(
+                $"bench bridge p99 {slow99Us:F3} us exceeded {BridgeP99FailureMicroseconds:F3} us.");
+        }
     }
 
     private static async Task PrintRawProgressAsync(
@@ -323,23 +310,69 @@ internal static class CliTestCommands
         return milliseconds * 1000.0;
     }
 
-    private sealed class BenchmarkViiperApi
+    private sealed class BenchmarkTiming(long[]? samples)
+    {
+        private int sampleIndex;
+
+        public long CurrentStartTimestamp { get; private set; }
+
+        public long TotalElapsed { get; private set; }
+
+        public void BeginReport()
+        {
+            CurrentStartTimestamp = Stopwatch.GetTimestamp();
+        }
+
+        public void EndReport()
+        {
+            long elapsed = Stopwatch.GetTimestamp() - CurrentStartTimestamp;
+            if (samples is null)
+            {
+                return;
+            }
+
+            samples[sampleIndex++] = elapsed;
+            TotalElapsed += elapsed;
+        }
+    }
+
+    private sealed class BenchmarkVirtualMouse(
+        MouseInput input,
+        int count,
+        BenchmarkTiming timing) : IVirtualMouse, IDisposable
+    {
+        public bool IsConnected => true;
+
+        public void Run(MouseInputHandler handler, CancellationToken cancellationToken = default)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                timing.BeginReport();
+                handler(in input);
+            }
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class BenchmarkViiperApi(BenchmarkTiming timing)
     {
         private int checksum;
-
-        public long LastReceivedTimestamp { get; private set; }
-
-        public void Reset()
-        {
-            LastReceivedTimestamp = 0;
-        }
 
         public void Send(MouseReport report, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ViiperMouseInput input = ViiperPhysicalMouse.MapReport(report);
 
-            LastReceivedTimestamp = Stopwatch.GetTimestamp();
+            timing.EndReport();
             checksum ^= input.Dx;
             checksum ^= input.Dy << 8;
             checksum ^= input.Wheel << 16;
@@ -348,12 +381,29 @@ internal static class CliTestCommands
         }
     }
 
-    private sealed class BenchmarkMouse(BenchmarkViiperApi viiperApi)
+    private sealed class BenchmarkPhysicalMouse(BenchmarkViiperApi viiperApi) : IPhysicalMouse, IDisposable
     {
-        public ValueTask SendAsync(MouseReport report, CancellationToken cancellationToken)
+        public bool IsConnected => true;
+
+        public bool FilterInput(in MouseInput input)
+        {
+            _ = input;
+            return true;
+        }
+
+        public ValueTask SendAsync(MouseReport report, CancellationToken cancellationToken = default)
         {
             viiperApi.Send(report, cancellationToken);
             return ValueTask.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        public void Dispose()
+        {
         }
     }
 

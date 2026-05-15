@@ -96,6 +96,17 @@ public sealed class ViiperPhysicalMouseTests
         Assert.IsFalse(ViiperPhysicalMouse.IsOwnedDevice(device));
     }
 
+    /// <summary>Checks source identity matching for the VIIPER-owned output device.</summary>
+    [TestMethod]
+    public void IsOwnedDeviceNameReturnsTrueForOwnedDeviceName()
+    {
+        const string Owned = @"\\?\HID#VID_6969&PID_5050#1";
+        const string Foreign = @"\\?\HID#VID_0001&PID_5050#1";
+
+        Assert.IsTrue(ViiperPhysicalMouse.IsOwnedDeviceName(Owned));
+        Assert.IsFalse(ViiperPhysicalMouse.IsOwnedDeviceName(Foreign));
+    }
+
     /// <summary>Checks single-owner mutex behavior.</summary>
     [TestMethod]
     public void TryAcquireOwnershipMutexReturnsNullWhenAlreadyOwned()
@@ -130,5 +141,4 @@ public sealed class ViiperPhysicalMouseTests
 
         Assert.IsFalse(secondAcquired);
     }
-
 }

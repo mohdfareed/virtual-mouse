@@ -61,6 +61,19 @@ public sealed class VirtualMouseTests
         Assert.HasCount(0, output.Reports);
     }
 
+    /// <summary>Checks transport-owned input filtering.</summary>
+    [TestMethod]
+    public void RunToAppliesOutputFilter()
+    {
+        MouseReport report = new(MouseButtons.Left, 1, -2, 0);
+        using TestVirtualMouse input = new(new MouseInput(report, "owned"));
+        using TestPhysicalMouse output = new(IsNotOwned);
+
+        input.RunTo(output);
+
+        Assert.HasCount(0, output.Reports);
+    }
+
     /// <summary>Checks report transforms.</summary>
     [TestMethod]
     public void RunToAppliesTransform()
@@ -69,7 +82,7 @@ public sealed class VirtualMouseTests
         using TestVirtualMouse input = new(new MouseInput(report, "device"));
         using TestPhysicalMouse output = new();
 
-        input.RunTo(output, MouseReportTransforms.NullifyMovement);
+        input.RunTo(output, InvertMovement);
 
         Assert.HasCount(1, output.Reports);
         Assert.AreEqual(MouseButtons.None, output.Reports[0].Buttons);
@@ -106,11 +119,21 @@ public sealed class VirtualMouseTests
         return !string.Equals(input.DeviceName, "owned", StringComparison.Ordinal);
     }
 
-    private sealed class TestPhysicalMouse : IPhysicalMouse, IDisposable
+    private static MouseReport InvertMovement(MouseReport report)
+    {
+        return new MouseReport(MouseButtons.None, -report.DeltaX, -report.DeltaY, 0);
+    }
+
+    private sealed class TestPhysicalMouse(MouseInputFilter? filter = null) : IPhysicalMouse, IDisposable
     {
         public bool IsConnected => true;
 
         public List<MouseReport> Reports { get; } = [];
+
+        public bool FilterInput(in MouseInput input)
+        {
+            return filter?.Invoke(in input) != false;
+        }
 
         public ValueTask SendAsync(MouseReport report, CancellationToken cancellationToken = default)
         {

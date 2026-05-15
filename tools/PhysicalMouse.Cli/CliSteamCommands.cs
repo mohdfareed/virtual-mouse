@@ -41,7 +41,7 @@ internal static class CliSteamCommands
 
     internal static MouseReport Nullify(MouseReport report)
     {
-        return MouseReportTransforms.NullifyMovement(report);
+        return new MouseReport(MouseButtons.None, -report.DeltaX, -report.DeltaY, 0);
     }
 
     internal static MouseReport ApplyMode(MouseReport report, SteamMouseMode mode)
