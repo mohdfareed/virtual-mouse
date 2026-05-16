@@ -1,0 +1,133 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using global::Viiper.Client;
+using global::Viiper.Client.Types;
+using ViiperXbox360Input = global::Viiper.Client.Devices.Xbox360.Xbox360Input;
+
+namespace Outputs.Viiper;
+
+/// <summary>VIIPER Xbox 360 output.</summary>
+public sealed class ViiperXbox360Output : IXbox360Output, IDisposable, IAsyncDisposable
+{
+    internal const ushort OwnedVendorId = 0x6969;
+    internal const ushort OwnedProductId = 0x3600;
+    internal const string OwnershipMutexName = @"Local\Outputs.Viiper.Xbox360";
+
+    private static readonly ViiperOutputDeviceDefinition DeviceDefinition = new(
+        "xbox360",
+        OwnedVendorId,
+        OwnedProductId,
+        OwnershipMutexName,
+        "Xbox 360");
+
+    private readonly ViiperOutputSession _session;
+
+    // MARK: Construction
+    // ========================================================================
+
+    /// <summary>Wraps an existing VIIPER device.</summary>
+    /// <param name="device">Connected device stream.</param>
+    public ViiperXbox360Output(ViiperDevice device)
+    {
+        _session = new ViiperOutputSession(device);
+    }
+
+    private ViiperXbox360Output(ViiperOutputSession session)
+    {
+        _session = session;
+    }
+
+    // MARK: Properties
+    // ========================================================================
+
+    /// <inheritdoc />
+    public bool IsConnected => _session.IsConnected;
+
+    /// <summary>Gets the connected bus ID, if known.</summary>
+    public uint? BusId => _session.BusId;
+
+    /// <summary>Gets the connected device ID, if known.</summary>
+    public string? DeviceId => _session.DeviceId;
+
+    // MARK: Connection
+    // ========================================================================
+
+    /// <summary>Creates and connects a VIIPER Xbox 360 device.</summary>
+    /// <param name="options">Connection options.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static Task<ViiperXbox360Output> ConnectAsync(
+        ViiperOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        return ViiperOutputConnector.ConnectAsync(
+            options,
+            DeviceDefinition,
+            "Another VIIPER Xbox 360 output session is already active.",
+            session => new ViiperXbox360Output(session),
+            cancellationToken);
+    }
+
+    // MARK: Output
+    // ========================================================================
+
+    /// <inheritdoc />
+    public ValueTask SendAsync(Xbox360Report report, CancellationToken cancellationToken = default)
+    {
+        return new ValueTask(_session
+            .GetDeviceOrThrow("Xbox 360 output is not connected.")
+            .SendAsync(MapReport(report), cancellationToken));
+    }
+
+    // MARK: Disposal
+    // ========================================================================
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        DisposeAsync().AsTask().GetAwaiter().GetResult();
+    }
+
+    /// <inheritdoc />
+    public ValueTask DisposeAsync()
+    {
+        return _session.DisposeAsync();
+    }
+
+    // MARK: Internal
+    // ========================================================================
+
+    internal static ViiperXbox360Input MapReport(Xbox360Report report)
+    {
+        return new ViiperXbox360Input
+        {
+            Buttons = (uint)report.Buttons,
+            Lt = report.LeftTrigger,
+            Rt = report.RightTrigger,
+            Lx = report.LeftX,
+            Ly = report.LeftY,
+            Rx = report.RightX,
+            Ry = report.RightY,
+        };
+    }
+
+    internal static bool IsOwnedDevice(Device device)
+    {
+        return DeviceDefinition.IsOwnedDevice(device);
+    }
+
+    internal static bool IsOwnedDeviceName(string? deviceName)
+    {
+        return DeviceDefinition.IsOwnedDeviceName(deviceName);
+    }
+
+    internal static string FormatUsbId(ushort value)
+    {
+        return ViiperOutputDeviceDefinition.FormatUsbId(value);
+    }
+
+    internal static ViiperOutputOwnership? TryAcquireOwnership(string name)
+    {
+        return ViiperOutputOwnership.TryAcquire(name);
+    }
+}

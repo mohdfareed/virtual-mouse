@@ -5,6 +5,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$project = Join-Path $PSScriptRoot "..\tools\PhysicalMouse.Cli\PhysicalMouse.Cli.csproj"
+$project = Join-Path $PSScriptRoot "..\cli\Cli.csproj"
 
 dotnet run --project $project -- @Arguments

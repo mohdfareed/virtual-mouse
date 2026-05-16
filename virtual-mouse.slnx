@@ -1,20 +1,32 @@
 <Solution>
 
+  <Folder Name="/src/Inputs/">
+    <Project Path="src/Inputs/Inputs.csproj" />
+    <Project Path="src/Inputs/RawInput/Inputs.RawInput.csproj" />
+    <Project Path="src/Inputs/Sdl/Inputs.Sdl.csproj" />
+  </Folder>
+
+  <Folder Name="/src/Outputs/">
+    <Project Path="src/Outputs/Outputs.csproj" />
+    <Project Path="src/Outputs/Teensy/Outputs.Teensy.csproj" />
+    <Project Path="src/Outputs/Viiper/Outputs.Viiper.csproj" />
+  </Folder>
+
   <Folder Name="/src/">
-    <Project Path="src/PhysicalMouse/PhysicalMouse.csproj" />
-    <Project Path="src/PhysicalMouse.Teensy/PhysicalMouse.Teensy.csproj" />
-    <Project Path="src/PhysicalMouse.Viiper/PhysicalMouse.Viiper.csproj" />
-    <Project Path="src/VirtualMouse/VirtualMouse.csproj" />
-    <Project Path="src/VirtualMouse.RawInput/VirtualMouse.RawInput.csproj" />
+    <Project Path="src/Hosting/Hosting.csproj" />
+    <Project Path="src/SteamInput/SteamInput.csproj" />
   </Folder>
 
   <Folder Name="/tests/">
-    <Project Path="tests/PhysicalMouse.Tests/PhysicalMouse.Tests.csproj" />
-    <Project Path="tests/VirtualMouse.Tests/VirtualMouse.Tests.csproj" />
+    <Project Path="tests/Cli.Tests/Cli.Tests.csproj" />
+    <Project Path="tests/Hosting.Tests/Hosting.Tests.csproj" />
+    <Project Path="tests/Inputs.Tests/Inputs.Tests.csproj" />
+    <Project Path="tests/Outputs.Tests/Outputs.Tests.csproj" />
+    <Project Path="tests/SteamInput.Tests/SteamInput.Tests.csproj" />
   </Folder>
 
-  <Folder Name="/tools/">
-    <Project Path="tools/PhysicalMouse.Cli/PhysicalMouse.Cli.csproj" />
+  <Folder Name="/cli/">
+    <Project Path="cli/Cli.csproj" />
   </Folder>
 
 </Solution>

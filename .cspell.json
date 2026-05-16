@@ -1,10 +1,20 @@
 {
   "words": [
+    "appmanifest",
+    "controllerconfig",
+    "forceinputappid",
+    "gamepads",
+    "installdir",
+    "libraryfolders",
+    "LOCALAPPDATA",
     "microcontroller",
     "slnx",
+    "steamapps",
     "steamworks",
     "testbench",
+    "thumbstick",
     "viiper",
-    "winapi"
+    "winapi",
+    "xpad"
   ]
 }

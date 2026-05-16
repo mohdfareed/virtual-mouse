@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository is for forwarding mouse input to a physical mouse transport.
+This repository is for forwarding local input to physical or virtual output transports.
 Keep discussion and code scoped to this repository only.
 Do not mention other applications, launch flows, or the larger system context.
 
@@ -14,6 +14,7 @@ Treat this file as living project memory.
 - Add only durable guidance that is likely to matter again.
 - Prefer updating this file during the same task where the preference or rule becomes clear.
 - Do not add temporary notes, one-off debugging details, or stale implementation trivia.
+- Use `TODO.md` for durable refactoring backlog items; keep this file focused on conventions, design decisions, and workflow rules.
 
 ## Current Stack
 
@@ -25,14 +26,21 @@ Do not set `LangVersion=latest`.
 
 ## Project Shape
 
-- `src/PhysicalMouse`: shared contracts
-- `src/PhysicalMouse.Viiper`: VIIPER transport
-- `src/PhysicalMouse.Teensy`: Teensy 4.0 transport
-- `src/VirtualMouse`: shared input contracts
-- `src/VirtualMouse.RawInput`: Windows Raw Input source
-- `tests/PhysicalMouse.Tests`: tests
-- `tests/VirtualMouse.Tests`: virtual mouse tests
-- `tools/PhysicalMouse.Cli`: CLI harness
+- `src/Inputs`: input source contracts and canonical input models
+- `src/Inputs/RawInput`: Windows Raw Input mouse source
+- `src/Inputs/Sdl`: SDL gamepad source
+- `src/Outputs`: output contracts and output-format report models
+- `src/Outputs/Viiper`: VIIPER output transports
+- `src/Outputs/Teensy`: Teensy output transports
+- `src/Hosting`: local forwarding host/control process primitives
+- `src/SteamInput`: Steam Input control helpers
+- `tests/Inputs.Tests`: input contract and source tests
+- `tests/Outputs.Tests`: output contract and transport tests
+- `tests/Hosting.Tests`: host/control tests
+- `tests/SteamInput.Tests`: Steam Input helper tests
+- `tests/Cli.Tests`: CLI command tests
+- `cli`: CLI harness
+- `cli/Tools`: CLI-only diagnostics and benchmark helpers
 - `firmware`: microcontroller-side code
 - `scripts`: repo scripts
 
@@ -41,23 +49,48 @@ Do not set `LangVersion=latest`.
 - Keep the API small.
 - Build only the MVP for this repository.
 - Prefer direct pass-through over abstraction layers.
+- Organize new non-mouse work around input sources, output devices, and hosting/orchestration.
+- Group input projects under `src/Inputs` and output projects under `src/Outputs`, including their side-specific contracts.
+- Avoid project-name sprawl. Prefer folders inside a coherent project when a split would create many thin projects.
+- Keep shared input contracts and canonical input models in `src/Inputs`; keep output contracts and output-format reports in `src/Outputs`.
+- Do not let `src/Inputs` depend on `src/Outputs`.
+- Put source-to-output bridge helpers and output-specific mapping routes in `src/Hosting`, not in `src/Inputs`.
+- Do not put shared gamepad, keyboard, or VIIPER code under a mouse-specific namespace.
+- Organize Hosting by responsibility: `Forwarding`, `Routes`, `Host`, `Control`, and `Runtime`.
+- Keep Hosting public API types in the `Hosting` namespace even when files are organized into responsibility folders.
+- Do not split Hosting into one type or one tiny model per file. Keep tightly related route, host, runtime, and control types together in coherent files.
+- Keep `src` limited to code that belongs in the final app backend. CLI-only diagnostics, benchmarks, probes, and manual testing helpers belong under `cli` or `tests`.
+- CLI testing tools may use `InternalsVisibleTo("Cli")` for measurement hooks; do not move the tool implementation back into `src` just to access internals.
 - Do not add buffering, smoothing, batching, retries, or background pipelines unless explicitly requested.
 - Do not introduce latency or side effects in library code beyond what the underlying transport already requires.
 - Keep transport connection APIs transport-specific.
-- Keep source-to-output forwarding on the shared `IVirtualMouse`/`IPhysicalMouse` path; transports should provide filtering through `IPhysicalMouse.FilterInput`.
+- Keep mouse source-to-output forwarding on the shared `IMouseInputSource`/`IMouseOutput` path in `src/Hosting`; transports should provide source-name filtering through `IMouseOutput.FilterInput`.
+- For future controller and keyboard paths, keep source and output contracts explicit instead of forcing mouse, keyboard, and gamepad state through one generic interface.
+- Use SDL as the controller input source and map its standard gamepad state through hosting routes before sending to a concrete output such as Xbox 360 or DS4.
 - Do not add a shared factory or transport manager unless explicitly requested.
 - Do not add a shared cross-transport options type.
-- `IPhysicalMouse` represents a usable mouse session, not a transport factory.
-- `IVirtualMouse` represents a usable mouse input session.
+- `IMouseOutput` represents a usable mouse session, not a transport factory.
+- `IMouseInputSource` represents a usable mouse input session.
 - Use direct callbacks for virtual mouse input hot paths; do not add event queues or buffering unless explicitly requested.
 - Push back when a requested change leaks caller responsibility into this repository, expands scope, or adds avoidable hot-path overhead.
 - Treat 1000 Hz mouse-rate input and sub-2-5 ms added latency as hot-path design targets.
 - Keep hot-path performance and benchmarkable boundaries as top priorities when shaping shared interfaces and transport code.
+- Prefer one local host process for production forwarding. The host owns Raw Input and the physical output transport; other processes should use control IPC instead of running their own forwarding loops.
+- Keep host IPC control-only. Do not forward per-report mouse traffic over IPC unless explicitly revisited.
+- Host routes are explicit. Mouse uses the default host control pipe; xpad uses a route-specific host control pipe and ownership name.
+- Host single-instance ownership must be safe across async continuations; do not use a thread-affine lock that has to be released on the acquiring thread.
+- Put durable Steam Input configuration forcing code in `src` as reusable library code; CLI tools should only expose or orchestrate it.
+- Keep Steam file parsing in `src/SteamInput`; read local Steam files defensively and cover parsers with tests using fake Steam directories.
+- Expose Steam game discovery through static `SteamInputClient.ListGames`; keep library-folder, manifest, shortcut-path, install discovery, and parser helpers internal.
+- Keep the Steam Input control API to caller-facing actions: force a config, clear forcing, and open controller config. Do not expose URI builders, duplicate static/instance variants, detected app state, or activation lifetime state without a real workflow.
+- Keep `SteamGame` small for the current CLI: app id, name, entry kind, and one local path. Do not expose Steam shortcut icons, tags, launch options, or raw metadata until a real workflow needs them.
+- Keep VIIPER server probing/startup logic in `src/Outputs/Viiper`; CLI code may orchestrate auto-start but should not own the probing or process-start rules.
 
 ## Current API Direction
 
-- `IPhysicalMouse` is the base connected-session interface.
-- `IPhysicalMouse.FilterInput` is the transport-owned loopback/source filter used by shared forwarding.
+- `IMouseOutput` is the base connected-session interface.
+- `IMouseOutput.FilterInput` is the transport-owned loopback/source filter used by shared forwarding.
+- `Hosting` owns enable/disable/status control for a local forwarding host.
 - Connection entrypoints should live on concrete transport types.
 - Input connection entrypoints should live on concrete source types.
 - Use transport-specific options types when config becomes large enough to justify them.
@@ -67,12 +100,15 @@ Do not set `LangVersion=latest`.
 
 - Treat VIIPER as a direct handoff target.
 - Map `MouseReport` directly to VIIPER mouse input.
+- Map `Xbox360Report` directly to VIIPER Xbox 360 input.
 - Fail on unsupported ranges rather than clamping silently.
 - Keep implementation thin and explicit.
+- Organize VIIPER by responsibility: device-specific outputs under `Mouse` and `Xbox360`, server startup under `Server`, and shared ownership/session/create-connect-reclaim/logging code under `Shared`.
+- Keep VIIPER public API types in the `Outputs.Viiper` namespace even when files are organized into responsibility folders.
 - Steam nullifier commands should ignore the owned VIIPER output device by VID/PID so the Steam path does not feed back on itself.
-- Use one VIIPER session model: create one mouse device on connect and remove it on dispose.
-- Mark created VIIPER devices with a fixed VID/PID pair and reclaim only those on startup.
-- Enforce one active VIIPER owner with a named mutex; concurrent instances should fail fast instead of competing.
+- Use one VIIPER session model: create one route-specific output device on connect and remove it on dispose.
+- Mark created VIIPER devices with fixed route-specific VID/PID pairs and reclaim only those owned devices on startup.
+- Enforce one active VIIPER owner with a named ownership primitive; concurrent instances should fail fast instead of competing, and ownership must be safe across async continuations.
 
 ## Teensy Notes
 
@@ -82,10 +118,11 @@ Do not set `LangVersion=latest`.
 ## Raw Input Notes
 
 - Treat Raw Input as the only virtual mouse input implementation until explicitly revisited.
+- In the host model, Raw Input runs inside the local host process.
 - Follow Microsoft's documented Raw Input model first.
 - Prefer the performance-oriented documented path over simplifying code by adding per-report allocations or extra native calls.
 - In a `WM_INPUT` handler, read the current event from `lParam` with `GetRawInputData`, then use `GetRawInputBuffer` only to drain additional queued events.
-- Keep raw input filtering caller-driven; do not bake Steam-specific assumptions into `VirtualMouse.RawInput`.
+- Keep raw input filtering caller-driven; do not bake Steam-specific assumptions into `Inputs.RawInput`.
 - Put durable source/transport interop logic in `src`; CLI tools should orchestrate and display results, not own reusable forwarding rules.
 
 ## Testing Rules
@@ -95,8 +132,16 @@ Do not set `LangVersion=latest`.
 - Keep tests in the solution.
 - Keep tests focused on behavior and mapping, not internal structure.
 - For retained CLI tools, prefer `System.CommandLine` over a hand-rolled parser.
+- Keep the CLI project at `cli/Cli.csproj`; do not put it under `tools`.
+- Keep daily forwarding commands under explicit device groups: `mouse run` for Raw Input mouse forwarding and `xpad run` for SDL gamepad to VIIPER Xbox 360 forwarding.
+- Keep mouse nullifier behavior in CLI tools; direct mouse forwarding is the backend/product path.
+- Keep synthetic xpad test input, such as one-shot Xbox button presses, in CLI tools. Backend gamepad code should focus on real SDL-to-output forwarding.
+- Keep Steam Input controls under `steam` commands such as `list`, `force`, `clear`, and `open-config`; do not reuse `steam` as a mouse-forwarding command.
 - CLI output should be concise, aligned, and value-first; avoid prose verdicts and unexplained benchmark jargon.
-- Keep CLI `bench` measurements split by explicit boundaries: `bridge` for source callback to VIIPER API receive, `raw` for Raw Input API read/decode to callback, and `all` for reporting both. Do not fold external VIIPER client/device latency into repository-code latency claims.
+- Keep CLI `bench` as one command with input and output arguments, such as `bench raw viiper` or `bench sdl viiper`. It may print multiple measured repository boundaries for that pair, but do not reintroduce separate raw/bridge/all or xpad bench command trees.
+- Keep benchmark mechanics under `cli/Tools/Benchmarks`; they are CLI testing tools, not app backend library code.
+- Do not fold external VIIPER client/device latency into repository-code benchmark claims.
+- Put shared CLI option and validation helpers in `cli/Support/CliOptions.cs`; command files should reuse them instead of duplicating validators.
 
 ## Logging Rules
 
@@ -106,6 +151,7 @@ Do not set `LangVersion=latest`.
 - Keep logging at the transport level, not the shared base interface.
 - Log lifecycle events only.
 - Do not log per-report hot-path traffic.
+- The local host may use `ILogger` for lifecycle events. The CLI should inject a console logger only; do not add file logging unless explicitly requested.
 
 ## Scripts
 
@@ -151,8 +197,8 @@ The separator line is always 79 characters wide.
 
 ## Naming
 
-- Use `PhysicalMouse` as the root library name.
-- Use `PhysicalMouse.<Transport>` for transport projects.
+- Use `Inputs`, `Outputs`, `Hosting`, and `SteamInput` as the top-level project buckets for new work.
+- Keep namespaces aligned with project buckets: `Inputs`, `Inputs.RawInput`, `Inputs.Sdl`, `Outputs`, `Outputs.Viiper`, `Outputs.Teensy`, `Hosting`, and `SteamInput`.
 - Prefer clear names over over-general names.
 
 ## Style Preferences
@@ -161,6 +207,7 @@ The separator line is always 79 characters wide.
 - Avoid self-referential wording like "minimal" in project-facing text.
 - Use explicit `using` directives.
 - Prefer a small number of coherent files over many tiny files when the types are tightly related.
+- Avoid single-model-per-file layouts for small related contracts, options, status records, log helpers, or leases.
 - For CLI code, prefer a few coherent files grouped by command family or shared concerns.
 - Do not collapse the CLI into one large file, and do not split it into many tiny files with barely any logic.
 - Do not place source files under dot-prefixed folders in SDK-style projects; the default compile glob will skip them.
