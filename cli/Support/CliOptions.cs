@@ -33,7 +33,7 @@ internal static class CliOptions
     {
         return new Option<ForwardingRouteKind?>("--route")
         {
-            Description = "Route to control. Default: mouse.",
+            Description = "Route to enable for this client session. Omit to connect without enabling forwarding.",
         };
     }
 

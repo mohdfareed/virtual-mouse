@@ -41,10 +41,8 @@ public sealed class ForwardingClient
 
     private string PipeName { get; } = ForwardingServer.PipeName;
 
-    /// <summary>Enables forwarding for a route until the returned lease is disposed.</summary>
-    public async Task<ForwardingEnableLease> EnableAsync(
-        ForwardingRouteKind route,
-        CancellationToken cancellationToken = default)
+    /// <summary>Connects to the host until the returned session is disposed.</summary>
+    public async Task<ForwardingClientSession> ConnectAsync(CancellationToken cancellationToken = default)
     {
         NamedPipeClientStream pipe = CreatePipe();
 
@@ -52,12 +50,30 @@ public sealed class ForwardingClient
         {
             await ConnectAsync(pipe, cancellationToken).ConfigureAwait(false);
             IForwardingHostControl proxy = JsonRpc.Attach<IForwardingHostControl>(pipe);
-            await proxy.EnableAsync(route).WaitAsync(cancellationToken).ConfigureAwait(false);
-            return new ForwardingEnableLease(pipe, proxy);
+            return new ForwardingClientSession(pipe, proxy);
         }
         catch
         {
             await pipe.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>Connects to the host and enables forwarding for a route until the returned session is disposed.</summary>
+    public async Task<ForwardingClientSession> EnableAsync(
+        ForwardingRouteKind route,
+        CancellationToken cancellationToken = default)
+    {
+        ForwardingClientSession session = await ConnectAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await session.EnableAsync(route, cancellationToken).ConfigureAwait(false);
+            return session;
+        }
+        catch
+        {
+            await session.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -109,26 +125,33 @@ public sealed class ForwardingClient
     }
 }
 
-/// <summary>Keeps forwarding enabled while connected.</summary>
-public sealed class ForwardingEnableLease : IAsyncDisposable, IDisposable
+/// <summary>Keeps a host control session alive while connected.</summary>
+public sealed class ForwardingClientSession : IAsyncDisposable, IDisposable
 {
     private NamedPipeClientStream? _pipe;
-    private IDisposable? _proxy;
+    private IForwardingHostControl? _proxy;
 
-    internal ForwardingEnableLease(
+    internal ForwardingClientSession(
         NamedPipeClientStream pipe,
         IForwardingHostControl proxy)
     {
         _pipe = pipe;
-        _proxy = (IDisposable)proxy;
+        _proxy = proxy;
+    }
+
+    /// <summary>Enables forwarding for a route on this session.</summary>
+    public Task EnableAsync(ForwardingRouteKind route, CancellationToken cancellationToken = default)
+    {
+        IForwardingHostControl proxy = GetProxy();
+        return proxy.EnableAsync(route).WaitAsync(cancellationToken);
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
         NamedPipeClientStream? pipe = Interlocked.Exchange(ref _pipe, null);
-        IDisposable? proxy = Interlocked.Exchange(ref _proxy, null);
-        proxy?.Dispose();
+        IForwardingHostControl? proxy = Interlocked.Exchange(ref _proxy, null);
+        (proxy as IDisposable)?.Dispose();
         pipe?.Dispose();
     }
 
@@ -136,12 +159,17 @@ public sealed class ForwardingEnableLease : IAsyncDisposable, IDisposable
     public async ValueTask DisposeAsync()
     {
         NamedPipeClientStream? pipe = Interlocked.Exchange(ref _pipe, null);
-        IDisposable? proxy = Interlocked.Exchange(ref _proxy, null);
-        proxy?.Dispose();
+        IForwardingHostControl? proxy = Interlocked.Exchange(ref _proxy, null);
+        (proxy as IDisposable)?.Dispose();
 
         if (pipe is not null)
         {
             await pipe.DisposeAsync().ConfigureAwait(false);
         }
+    }
+
+    private IForwardingHostControl GetProxy()
+    {
+        return _proxy ?? throw new ObjectDisposedException(nameof(ForwardingClientSession));
     }
 }

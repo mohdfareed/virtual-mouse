@@ -19,26 +19,27 @@ internal static class ClientCommands
 
     private static Command CreateRunCommand()
     {
-        Command command = new("run", "Enable forwarding for a route until cancelled.");
-        Option<ForwardingRouteKind> routeOption = CliOptions.CreateRequiredRouteOption();
+        Command command = new("run", "Open a client session and optionally enable a route until cancelled.");
+        Option<ForwardingRouteKind?> routeOption = CliOptions.CreateRouteOption();
         command.Options.Add(routeOption);
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            ForwardingRouteKind route = parseResult.GetValue(routeOption);
-            ForwardingEnableLease? lease = await TryEnableAsync(route, cancellationToken).ConfigureAwait(false);
-            if (lease is null)
+            ForwardingRouteKind? route = parseResult.GetValue(routeOption);
+            ForwardingClientSession? session = await TryConnectAsync(route, cancellationToken).ConfigureAwait(false);
+            if (session is null)
             {
                 return;
             }
 
-            await using (lease.ConfigureAwait(false))
+            await using (session.ConfigureAwait(false))
             {
                 try
                 {
-                    await Console.Out.WriteLineAsync(
-                        $"route={ForwardingServer.GetRouteId(route)} enabled=true. Ctrl+C to release.")
-                        .ConfigureAwait(false);
+                    string status = route.HasValue
+                        ? $"route={ForwardingServer.GetRouteId(route.Value)} enabled=true"
+                        : "route=none enabled=false";
+                    await Console.Out.WriteLineAsync($"{status}. Ctrl+C to release.").ConfigureAwait(false);
                     await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -53,20 +54,23 @@ internal static class ClientCommands
     // MARK: Helpers
     // ========================================================================
 
-    internal static async Task<ForwardingEnableLease?> TryEnableAsync(
-        ForwardingRouteKind route,
+    internal static async Task<ForwardingClientSession?> TryConnectAsync(
+        ForwardingRouteKind? route,
         CancellationToken cancellationToken)
     {
         ForwardingClient client = new();
         try
         {
-            return await client.EnableAsync(route, cancellationToken).ConfigureAwait(false);
+            return route.HasValue
+                ? await client.EnableAsync(route.Value, cancellationToken).ConfigureAwait(false)
+                : await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
-            await Console.Error.WriteLineAsync(
-                $"client route={ForwardingServer.GetRouteId(route)}: host not running")
-                .ConfigureAwait(false);
+            string message = route.HasValue
+                ? $"client route={ForwardingServer.GetRouteId(route.Value)}: host not running"
+                : "client: host not running";
+            await Console.Error.WriteLineAsync(message).ConfigureAwait(false);
             Environment.ExitCode = 1;
             return null;
         }

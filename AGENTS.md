@@ -141,7 +141,7 @@ Do not set `LangVersion=latest`.
 - For retained CLI tools, prefer `System.CommandLine` over a hand-rolled parser.
 - Keep the CLI project at `cli/Cli.csproj`; do not put it under `tools`.
 - Keep the CLI split into `host` for host lifecycle, `client` for normal host control, `steam` for Steam product features, and `test` for diagnostics and manual tools.
-- Keep daily forwarding under `client run --route <route>`, not under top-level device command groups.
+- Keep daily forwarding under `client run [--route <route>]`, not under top-level device command groups.
 - Keep one host process that owns all supported routes. Host startup config chooses route-specific setup such as the SDL gamepad device index, while each route connects lazily only when at least one client enables it.
 - Keep diagnostics such as probes, raw input viewers, nullifiers, synthetic button presses, and benchmark commands under `test`, not under product-facing command groups.
 - Do not add legacy or compatibility CLI aliases before the project has had a release. Keep only the current intended command shape.

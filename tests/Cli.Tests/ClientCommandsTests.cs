@@ -23,6 +23,23 @@ public sealed class ClientCommandsTests
         Command client = ClientCommands.CreateClientCommand();
         Command run = client.Subcommands.Single(command => command.Name == "run");
 
-        CollectionAssert.Contains(run.Options.Select(option => option.Name).ToArray(), "--route");
+        Assert.IsTrue(run.Options.Any(IsRouteOption));
+    }
+
+    /// <summary>Checks client run accepts a route-less session.</summary>
+    [TestMethod]
+    public void CreateClientCommandDoesNotRequireRouteOption()
+    {
+        Command client = ClientCommands.CreateClientCommand();
+        Command run = client.Subcommands.Single(command => command.Name == "run");
+
+        Assert.IsFalse(run.Options.Single(IsRouteOption).Required);
+    }
+
+    private static bool IsRouteOption(Option option)
+    {
+        return option.Name is "route" or "--route"
+            || option.Aliases.Contains("route")
+            || option.Aliases.Contains("--route");
     }
 }
