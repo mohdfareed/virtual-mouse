@@ -78,6 +78,7 @@ Do not set `LangVersion=latest`.
 - Keep hot-path performance and benchmark-able boundaries as top priorities when shaping shared interfaces and transport code.
 - Prefer one local host process for production forwarding. The host owns Raw Input and the physical output transport; other processes should use control IPC instead of running their own forwarding loops.
 - Keep host IPC control-only. Do not forward per-report mouse traffic over IPC unless explicitly revisited.
+- Client control sessions may enable and disable route leases without disconnecting. Disconnecting a client must release any route leases it still holds.
 - Expose Hosting through normal app-facing `ForwardingServer` and `ForwardingClient` APIs. Keep named-pipe control details behind those types.
 - `ForwardingServer` should remain usable as a Microsoft `IHostedService` so CLI, tray, and WPF app hosts can compose it through Generic Host patterns.
 - Host routes are explicit peers. Do not describe mouse route names as defaults when they are really route-specific names.

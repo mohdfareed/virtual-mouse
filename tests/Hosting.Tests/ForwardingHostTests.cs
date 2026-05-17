@@ -163,6 +163,27 @@ public sealed class ForwardingHostTests
         Assert.IsFalse(disabled.Mouse.IsConnected);
     }
 
+    /// <summary>Checks control session route disabling without disconnecting.</summary>
+    [TestMethod]
+    public async Task ControlSessionDisableReleasesRouteWithoutDisconnecting()
+    {
+        await using ForwardingHostRuntime runtime = CreateRuntime();
+        using ForwardingHostControlSession session = new(runtime, requestStop: null, logger: null);
+
+        await session.EnableAsync(ForwardingRouteKind.Mouse).ConfigureAwait(false);
+        await session.DisableAsync(ForwardingRouteKind.Mouse).ConfigureAwait(false);
+
+        ForwardingHostStatus disabled = await session.GetStatusAsync().ConfigureAwait(false);
+        Assert.AreEqual(0, disabled.Mouse.EnabledClientCount);
+        Assert.IsFalse(disabled.Mouse.IsConnected);
+
+        await session.EnableAsync(ForwardingRouteKind.Xpad).ConfigureAwait(false);
+
+        ForwardingHostStatus reused = await session.GetStatusAsync().ConfigureAwait(false);
+        Assert.AreEqual(1, reused.Xpad.EnabledClientCount);
+        Assert.IsTrue(reused.Xpad.IsConnected);
+    }
+
     /// <summary>Checks control session stop callback.</summary>
     [TestMethod]
     public async Task ControlSessionStopRequestsServerStop()
@@ -205,6 +226,38 @@ public sealed class ForwardingHostTests
         ForwardingHostStatus status = await client.GetStatusAsync().ConfigureAwait(false);
 
         Assert.AreEqual("mouse", status.Mouse.RouteId);
+        await cancellation.CancelAsync().ConfigureAwait(false);
+        try
+        {
+            await serverTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    /// <summary>Checks route disabling through a connected local client session.</summary>
+    [TestMethod]
+    public async Task ControlClientSessionCanDisableAndReuseConnection()
+    {
+        string pipeName = $"Hosting.Tests.{Guid.NewGuid():N}";
+        await using ForwardingHostRuntime runtime = CreateRuntime();
+        ForwardingHostServer server = new(runtime, pipeName);
+        using CancellationTokenSource cancellation = new();
+        Task serverTask = server.RunAsync(cancellation.Token);
+        ForwardingClient client = new(pipeName, TimeSpan.FromSeconds(2));
+
+        await using ForwardingClientSession session = await client.ConnectAsync().ConfigureAwait(false);
+        await session.EnableAsync(ForwardingRouteKind.Mouse).ConfigureAwait(false);
+        await session.DisableAsync(ForwardingRouteKind.Mouse).ConfigureAwait(false);
+        await session.EnableAsync(ForwardingRouteKind.Xpad).ConfigureAwait(false);
+
+        ForwardingHostStatus status = await client.GetStatusAsync().ConfigureAwait(false);
+        Assert.AreEqual(0, status.Mouse.EnabledClientCount);
+        Assert.IsFalse(status.Mouse.IsConnected);
+        Assert.AreEqual(1, status.Xpad.EnabledClientCount);
+        Assert.IsTrue(status.Xpad.IsConnected);
+
         await cancellation.CancelAsync().ConfigureAwait(false);
         try
         {

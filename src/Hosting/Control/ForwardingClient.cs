@@ -146,6 +146,13 @@ public sealed class ForwardingClientSession : IAsyncDisposable, IDisposable
         return proxy.EnableAsync(route).WaitAsync(cancellationToken);
     }
 
+    /// <summary>Disables forwarding for a route on this session without disconnecting.</summary>
+    public Task DisableAsync(ForwardingRouteKind route, CancellationToken cancellationToken = default)
+    {
+        IForwardingHostControl proxy = GetProxy();
+        return proxy.DisableAsync(route).WaitAsync(cancellationToken);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {

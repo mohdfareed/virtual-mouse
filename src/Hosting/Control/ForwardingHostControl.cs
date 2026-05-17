@@ -104,6 +104,8 @@ internal partial interface IForwardingHostControl
 
     Task EnableAsync(ForwardingRouteKind route);
 
+    Task DisableAsync(ForwardingRouteKind route);
+
     Task StopAsync();
 }
 
@@ -133,6 +135,13 @@ internal sealed class ForwardingHostControlSession(
         ForwardingHostControlLog.LeaseOpened(logger, ForwardingServer.GetRouteId(route));
     }
 
+    public Task DisableAsync(ForwardingRouteKind route)
+    {
+        ForwardingHostControlLog.ReceivedCommand(logger, nameof(DisableAsync));
+        ReleaseLease(route);
+        return Task.CompletedTask;
+    }
+
     public Task StopAsync()
     {
         ForwardingHostControlLog.ReceivedCommand(logger, nameof(StopAsync));
@@ -144,11 +153,24 @@ internal sealed class ForwardingHostControlSession(
     {
         foreach ((ForwardingRouteKind route, IDisposable lease) in _leases)
         {
-            lease.Dispose();
-            ForwardingHostControlLog.LeaseClosed(logger, ForwardingServer.GetRouteId(route));
+            ReleaseLease(route, lease);
         }
 
         _leases.Clear();
+    }
+
+    private void ReleaseLease(ForwardingRouteKind route)
+    {
+        if (_leases.Remove(route, out IDisposable? lease))
+        {
+            ReleaseLease(route, lease);
+        }
+    }
+
+    private void ReleaseLease(ForwardingRouteKind route, IDisposable lease)
+    {
+        lease.Dispose();
+        ForwardingHostControlLog.LeaseClosed(logger, ForwardingServer.GetRouteId(route));
     }
 }
 
