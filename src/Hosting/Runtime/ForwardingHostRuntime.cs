@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -172,7 +173,6 @@ internal sealed class HostedRouteController(
 
         public async ValueTask DisposeAsync()
         {
-            enableLease.Dispose();
             await cancellationSource.CancelAsync().ConfigureAwait(false);
 
             try
@@ -182,8 +182,18 @@ internal sealed class HostedRouteController(
             catch (OperationCanceledException) when (cancellationSource.IsCancellationRequested)
             {
             }
+            catch (IOException) when (cancellationSource.IsCancellationRequested)
+            {
+            }
+            catch (ObjectDisposedException) when (cancellationSource.IsCancellationRequested)
+            {
+            }
+            catch (InvalidOperationException) when (cancellationSource.IsCancellationRequested)
+            {
+            }
             finally
             {
+                enableLease.Dispose();
                 cancellationSource.Dispose();
                 await Host.DisposeAsync().ConfigureAwait(false);
             }

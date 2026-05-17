@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Inputs;
@@ -139,13 +140,25 @@ public static class GamepadForwardingExtensions
         Xbox360Report report,
         CancellationToken cancellationToken)
     {
-        ValueTask sendTask = output.SendAsync(report, cancellationToken);
-        if (sendTask.IsCompleted)
+        try
         {
-            sendTask.GetAwaiter().GetResult();
-            return;
-        }
+            ValueTask sendTask = output.SendAsync(report, cancellationToken);
+            if (sendTask.IsCompleted)
+            {
+                sendTask.GetAwaiter().GetResult();
+                return;
+            }
 
-        sendTask.AsTask().GetAwaiter().GetResult();
+            sendTask.AsTask().GetAwaiter().GetResult();
+        }
+        catch (IOException) when (cancellationToken.IsCancellationRequested || !output.IsConnected)
+        {
+        }
+        catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested || !output.IsConnected)
+        {
+        }
+        catch (InvalidOperationException) when (cancellationToken.IsCancellationRequested || !output.IsConnected)
+        {
+        }
     }
 }

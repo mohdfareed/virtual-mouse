@@ -107,6 +107,7 @@ Do not set `LangVersion=latest`.
 - Treat VIIPER as a direct handoff target.
 - Map `MouseReport` directly to VIIPER mouse input.
 - Map `Xbox360Report` directly to VIIPER Xbox 360 input.
+- For virtual controller outputs, use the real controller USB identity expected by games and drivers. Xbox 360 output uses Microsoft `045E:028E`; DS4 should use Sony `054C:05C4` for the original DS4 unless a newer CUH-ZCT2 profile specifically needs `054C:09CC`.
 - Fail on unsupported ranges rather than clamping silently.
 - Keep implementation thin and explicit.
 - Organize VIIPER by responsibility: device-specific outputs under `Mouse` and `Xbox360`, server startup under `Server`, and shared ownership/session/create-connect-reclaim/logging code under `Shared`.

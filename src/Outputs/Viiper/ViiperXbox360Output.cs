@@ -10,8 +10,8 @@ namespace Outputs.Viiper;
 /// <summary>VIIPER Xbox 360 output.</summary>
 public sealed class ViiperXbox360Output : IXbox360Output, IDisposable, IAsyncDisposable
 {
-    internal const ushort OwnedVendorId = 0x6969;
-    internal const ushort OwnedProductId = 0x3600;
+    internal const ushort OwnedVendorId = 0x045E;
+    internal const ushort OwnedProductId = 0x028E;
     internal const string OwnershipMutexName = @"Local\Outputs.Viiper.Xbox360";
 
     private static readonly ViiperOutputDeviceDefinition DeviceDefinition = new(

@@ -77,6 +77,8 @@ internal sealed class ViiperOutputSession : IDisposable, IAsyncDisposable
 
         try
         {
+            await device.DisposeAsync().ConfigureAwait(false);
+
             if (_client is not null && BusId.HasValue && !string.IsNullOrWhiteSpace(DeviceId))
             {
                 _ = await _client
@@ -87,7 +89,6 @@ internal sealed class ViiperOutputSession : IDisposable, IAsyncDisposable
         }
         finally
         {
-            await device.DisposeAsync().ConfigureAwait(false);
             _client?.Dispose();
             _ownership?.Dispose();
         }

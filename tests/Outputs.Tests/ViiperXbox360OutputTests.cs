@@ -88,8 +88,8 @@ public sealed class ViiperXbox360OutputTests
     [TestMethod]
     public void IsOwnedDeviceNameReturnsTrueForOwnedDeviceName()
     {
-        const string Owned = @"\\?\HID#VID_6969&PID_3600#1";
-        const string Foreign = @"\\?\HID#VID_0001&PID_3600#1";
+        const string Owned = @"\\?\HID#VID_045E&PID_028E#1";
+        const string Foreign = @"\\?\HID#VID_0001&PID_028E#1";
 
         Assert.IsTrue(ViiperXbox360Output.IsOwnedDeviceName(Owned));
         Assert.IsFalse(ViiperXbox360Output.IsOwnedDeviceName(Foreign));
