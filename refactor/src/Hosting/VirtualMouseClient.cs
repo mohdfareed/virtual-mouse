@@ -22,7 +22,7 @@ public static class ClientServices
     }
 }
 
-// MARK: Client State
+// MARK: Implementation
 // ============================================================================
 
 /// <summary>Current connection state of a client.</summary>
@@ -48,9 +48,6 @@ public sealed class ClientConnectionChangedEventArgs(ClientConnectionState state
     public Guid? ClientId { get; } = clientId;
 }
 
-// MARK: Client
-// ============================================================================
-
 // The app-facing client: connect it, send requests through it, then dispose it.
 /// <summary>App-facing client connection to the local server.</summary>
 public sealed class VirtualMouseClient : IAsyncDisposable
@@ -59,7 +56,7 @@ public sealed class VirtualMouseClient : IAsyncDisposable
     private bool _disposed;
 
     // MARK: Construction
-    // ============================================================================
+    // ========================================================================
 
     /// <summary>Creates a client from configured hosting settings.</summary>
     public VirtualMouseClient(IOptions<HostingSettings> options, ILoggerFactory loggerFactory)
@@ -74,7 +71,7 @@ public sealed class VirtualMouseClient : IAsyncDisposable
     }
 
     // MARK: API
-    // ============================================================================
+    // ========================================================================
 
     /// <summary>Raised when the server connection state changes.</summary>
     public event EventHandler<ClientConnectionChangedEventArgs>? ConnectionChanged;
@@ -99,6 +96,13 @@ public sealed class VirtualMouseClient : IAsyncDisposable
         return _connection.WaitAsync(cancellationToken);
     }
 
+    /// <summary>Gets the running server status.</summary>
+    public Task<ServerStatus> GetStatusAsync(CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+        return _connection.Server.GetStatusAsync().WaitAsync(cancellationToken);
+    }
+
     /// <summary>Disconnects from the server.</summary>
     public async ValueTask DisposeAsync()
     {
@@ -113,7 +117,7 @@ public sealed class VirtualMouseClient : IAsyncDisposable
     }
 
     // MARK: Helpers
-    // ============================================================================
+    // ========================================================================
 
     private void OnConnectionChanged(object? sender, ClientConnectionChangedEventArgs args)
     {

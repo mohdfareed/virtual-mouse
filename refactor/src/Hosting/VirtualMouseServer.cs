@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO.Pipes;
@@ -25,6 +26,12 @@ public static class ServerServices
     }
 }
 
+// MARK: Implementation
+// ============================================================================
+
+/// <summary>Current server status.</summary>
+public sealed record ServerStatus(int ConnectedClientCount);
+
 // The app-facing server owns connected clients and accepts client pipes.
 /// <summary>Long-lived local server for client connections.</summary>
 public sealed class VirtualMouseServer(
@@ -39,7 +46,7 @@ public sealed class VirtualMouseServer(
     internal IReadOnlyCollection<ConnectedClient> Clients => _clients.Snapshot;
 
     // MARK: API
-    // ============================================================================
+    // ========================================================================
 
     /// <summary>Runs the server until cancellation.</summary>
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -72,7 +79,7 @@ public sealed class VirtualMouseServer(
                 {
                     await pipe.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
                     NamedPipeServerStream connectedPipe = pipe;
-                    ServerConnection connection = new(connectedPipe, _clients, logger);
+                    ServerConnection connection = new(connectedPipe, this);
                     _connections[connection] = 0;
                     _ = Task.Run(() => RunConnectionAsync(connection, cancellationToken), CancellationToken.None);
                     pipe = null;
@@ -93,7 +100,7 @@ public sealed class VirtualMouseServer(
     }
 
     // MARK: Helpers
-    // ============================================================================
+    // ========================================================================
 
     private async Task RunConnectionAsync(ServerConnection connection, CancellationToken cancellationToken)
     {
@@ -112,6 +119,42 @@ public sealed class VirtualMouseServer(
         foreach (ServerConnection connection in _connections.Keys)
         {
             await connection.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    // MARK: Server API
+    // ========================================================================
+
+    internal Guid ConnectClient(int processId)
+    {
+        ConnectedClient client = _clients.Add(processId);
+        logger.LogInformation(
+            "Client connected: {ClientId} process={ProcessId} (clients={ClientCount})",
+            client.Id,
+            client.ProcessId,
+            _clients.Count);
+        return client.Id;
+    }
+
+    internal void DisconnectClient(Guid clientId)
+    {
+        _clients.Remove(clientId);
+        logger.LogInformation(
+            "Client disconnected: {ClientId} (clients={ClientCount})",
+            clientId,
+            _clients.Count);
+    }
+
+    internal Task<ServerStatus> GetStatusAsync()
+    {
+        return Task.FromResult(new ServerStatus(_clients.Count));
+    }
+
+    internal void ConnectionClosed(Exception exception)
+    {
+        if (exception is not OperationCanceledException)
+        {
+            logger.LogInformation("Client pipe closed: {Message}", exception.Message);
         }
     }
 }

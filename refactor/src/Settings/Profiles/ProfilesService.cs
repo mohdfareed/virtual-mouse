@@ -41,7 +41,7 @@ public sealed class ProfilesService : IDisposable
     private ProfileSnapshot _snapshot;
 
     // MARK: Construction
-    // ============================================================================
+    // ========================================================================
 
     /// <summary>Creates a profile service from reload-able game profile settings.</summary>
     public ProfilesService(
@@ -59,7 +59,7 @@ public sealed class ProfilesService : IDisposable
     }
 
     // MARK: API
-    // ============================================================================
+    // ========================================================================
 
     /// <summary>Lists configured profile ids.</summary>
     public IReadOnlyList<string> ListProfileIds()
@@ -90,7 +90,7 @@ public sealed class ProfilesService : IDisposable
     }
 
     // MARK: Helpers
-    // ============================================================================
+    // ========================================================================
 
     private void OnSettingsChanged(object? sender, ApplicationSettingsChangedEventArgs args)
     {

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using StreamJsonRpc;
 using VirtualMouse.Settings;
 
 namespace VirtualMouse.Hosting;
@@ -15,7 +16,7 @@ internal sealed class ClientConnection(
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private NamedPipeClientStream? _pipe;
-    private RequestResponsePipe? _messages;
+    private IVirtualMouseServerApi? _server;
 
     internal event EventHandler<ClientConnectionChangedEventArgs>? Changed;
 
@@ -23,12 +24,14 @@ internal sealed class ClientConnection(
 
     internal ClientConnectionState State { get; private set; } = ClientConnectionState.Disconnected;
 
+    internal IVirtualMouseServerApi Server => _server ?? throw new InvalidOperationException("Client is not connected.");
+
     internal async Task ConnectAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_messages is not null)
+            if (_server is not null)
             {
                 return;
             }
@@ -51,7 +54,7 @@ internal sealed class ClientConnection(
 
             try
             {
-                _ = await AckAsync(cancellationToken).ConfigureAwait(false);
+                await Server.AckAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception) when (IsConnectionFailure(exception))
             {
@@ -73,11 +76,6 @@ internal sealed class ClientConnection(
         return DisposeAsync();
     }
 
-    private Task<Ack> AckAsync(CancellationToken cancellationToken)
-    {
-        return Messages.AckAsync(cancellationToken);
-    }
-
     private async Task OpenAsync(CancellationToken cancellationToken)
     {
         string pipeName = options.Value.PipeName;
@@ -88,14 +86,15 @@ internal sealed class ClientConnection(
         try
         {
             await pipe.ConnectAsync(cancellationToken).ConfigureAwait(false);
-            RequestResponsePipe messages = new(pipe);
-            ConnectResponse response = await messages
-                .ConnectAsync(Environment.ProcessId, cancellationToken)
+            IVirtualMouseServerApi server = JsonRpc.Attach<IVirtualMouseServerApi>(pipe);
+            Guid clientId = await server
+                .ConnectAsync(Environment.ProcessId)
+                .WaitAsync(cancellationToken)
                 .ConfigureAwait(false);
 
             _pipe = pipe;
-            _messages = messages;
-            ClientId = response.ClientId;
+            _server = server;
+            ClientId = clientId;
             SetState(ClientConnectionState.Connected, ClientId);
             logger.LogInformation("Connected to server as {ClientId}", ClientId);
         }
@@ -129,11 +128,8 @@ internal sealed class ClientConnection(
 
     private async Task ClearAsync()
     {
-        RequestResponsePipe? messages = Interlocked.Exchange(ref _messages, null);
-        if (messages is not null)
-        {
-            await messages.DisposeAsync().ConfigureAwait(false);
-        }
+        IVirtualMouseServerApi? server = Interlocked.Exchange(ref _server, null);
+        (server as IDisposable)?.Dispose();
 
         NamedPipeClientStream? pipe = Interlocked.Exchange(ref _pipe, null);
         if (pipe is not null)
@@ -144,8 +140,6 @@ internal sealed class ClientConnection(
         ClientId = null;
         SetState(ClientConnectionState.Disconnected, null);
     }
-
-    private RequestResponsePipe Messages => _messages ?? throw new InvalidOperationException("Client is not connected.");
 
     private void SetState(ClientConnectionState state, Guid? clientId)
     {
@@ -160,6 +154,10 @@ internal sealed class ClientConnection(
 
     private static bool IsConnectionFailure(Exception exception)
     {
-        return exception is IOException or EndOfStreamException or InvalidOperationException;
+        return exception is IOException
+            or EndOfStreamException
+            or InvalidOperationException
+            or ConnectionLostException
+            or ObjectDisposedException;
     }
 }

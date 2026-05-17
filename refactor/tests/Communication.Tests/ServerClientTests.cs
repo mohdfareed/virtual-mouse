@@ -67,6 +67,62 @@ public sealed class ServerClientTests
         await StopServerAsync(serverTwoStop, serverTwoTask).ConfigureAwait(false);
     }
 
+    /// <summary>Checks that server status is returned over the client connection.</summary>
+    [TestMethod]
+    public async Task ClientCanReadServerStatus()
+    {
+        HostingSettings options = CreateOptions();
+        using CancellationTokenSource serverStop = new();
+        VirtualMouseServer server = CreateServer(options);
+        Task serverTask = server.RunAsync(serverStop.Token);
+
+        await using VirtualMouseClient client = CreateClient(options);
+        await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
+
+        ServerStatus status = await client.GetStatusAsync(CancellationToken.None).ConfigureAwait(false);
+
+        Assert.AreEqual(1, status.ConnectedClientCount);
+        await StopServerAsync(serverStop, serverTask).ConfigureAwait(false);
+    }
+
+    /// <summary>Checks that server shutdown releases connected clients.</summary>
+    [TestMethod]
+    public async Task ServerStopReleasesConnectedClients()
+    {
+        HostingSettings options = CreateOptions();
+        using CancellationTokenSource serverStop = new();
+        VirtualMouseServer server = CreateServer(options);
+        Task serverTask = server.RunAsync(serverStop.Token);
+
+        await using VirtualMouseClient client = CreateClient(options);
+        await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
+        await WaitUntilAsync(() => server.Clients.Count == 1).ConfigureAwait(false);
+
+        await StopServerAsync(serverStop, serverTask).ConfigureAwait(false);
+
+        await WaitUntilAsync(() => server.Clients.Count == 0).ConfigureAwait(false);
+    }
+
+    /// <summary>Checks that client disposal is idempotent.</summary>
+    [TestMethod]
+    public async Task ClientDisposeIsIdempotent()
+    {
+        HostingSettings options = CreateOptions();
+        using CancellationTokenSource serverStop = new();
+        VirtualMouseServer server = CreateServer(options);
+        Task serverTask = server.RunAsync(serverStop.Token);
+
+        await using VirtualMouseClient client = CreateClient(options);
+        await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
+        await WaitUntilAsync(() => server.Clients.Count == 1).ConfigureAwait(false);
+
+        await client.DisposeAsync().ConfigureAwait(false);
+        await client.DisposeAsync().ConfigureAwait(false);
+
+        await WaitUntilAsync(() => server.Clients.Count == 0).ConfigureAwait(false);
+        await StopServerAsync(serverStop, serverTask).ConfigureAwait(false);
+    }
+
     private static HostingSettings CreateOptions()
     {
         return new HostingSettings

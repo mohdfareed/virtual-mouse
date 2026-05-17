@@ -65,31 +65,8 @@ internal sealed record ProfileSnapshot(
 {
     public static ProfileSnapshot From(IReadOnlyDictionary<string, GameProfile> settings)
     {
-        Validate(settings);
         Dictionary<string, GameProfile> profiles = new(settings, StringComparer.OrdinalIgnoreCase);
         string[] profileIds = [.. profiles.Keys.Order(StringComparer.OrdinalIgnoreCase)];
         return new ProfileSnapshot(profiles, profileIds);
-    }
-
-    private static void Validate(IReadOnlyDictionary<string, GameProfile> profiles)
-    {
-        List<string> failures = [];
-        foreach ((string profileId, GameProfile profile) in profiles)
-        {
-            if (string.IsNullOrWhiteSpace(profile.Title))
-            {
-                failures.Add($"games:{profileId}:title is required.");
-            }
-
-            if (string.IsNullOrWhiteSpace(profile.Executable))
-            {
-                failures.Add($"games:{profileId}:executable is required.");
-            }
-        }
-
-        if (failures.Count > 0)
-        {
-            throw new InvalidOperationException(string.Join(Environment.NewLine, failures));
-        }
     }
 }

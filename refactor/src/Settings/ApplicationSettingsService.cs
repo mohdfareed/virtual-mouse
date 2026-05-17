@@ -66,6 +66,7 @@ public sealed class ApplicationSettingsService : IDisposable
         ArgumentNullException.ThrowIfNull(logger);
 
         _logger = logger;
+        SettingsValidation.Validate(settings.CurrentValue);
         Current = settings.CurrentValue;
         LogSettingsLoaded(_logger, null);
         _reloadSubscription = settings.OnChange(OnSettingsChanged);
@@ -85,6 +86,7 @@ public sealed class ApplicationSettingsService : IDisposable
 
     private void OnSettingsChanged(VirtualMouseSettings settings)
     {
+        SettingsValidation.Validate(settings);
         Current = settings;
         LogSettingsReloaded(_logger, null);
         Changed?.Invoke(this, new ApplicationSettingsChangedEventArgs(settings));

@@ -14,6 +14,9 @@
 - Keep client, server, request/response protocol, and named-pipe lifecycle management in `Hosting`.
 - Keep app-facing hosting classes readable first; move per-connection plumbing into internal helper types when it starts hiding the public contract.
 - In `Hosting`, keep user-facing public types at the project root. Put internal protocol, pipe, connection, and registry plumbing under `Shared`.
+- Keep `ClientConnection` focused on connection lifecycle. Server API calls such as status belong on `VirtualMouseClient` and use the connection pipe internally.
+- Keep server-owned status construction on server state/root server code. `ServerConnection` should dispatch status requests, not decide what status contains.
+- Endpoint request mapping belongs on `VirtualMouseServer` until it is large enough to deserve a dedicated router. `ServerConnection` only owns pipe connection lifecycle and delegates post-connect requests.
 - Before adding code, inspect the full pipeline and place behavior where that responsibility already belongs; do not add code to a nearby file just because it is convenient.
 - If a file named for a responsibility exists, put that responsibility there. For example, client connection/open/reconnect/clear/dispose logic belongs in `ClientConnection`, not `VirtualMouseClient`.
 - Do not make plumbing public to satisfy constructor or test convenience. Keep `ClientConnection` and connection liveness calls internal; expose only the app-facing `VirtualMouseClient` surface.
@@ -24,10 +27,16 @@
 - Keep app-wide settings in the `Settings` project. Profiles are a `Settings.Profiles` folder/namespace that owns only game profile options and profile lookup/reload behavior.
 - Settings expose a `VirtualMouseSettings` root object. CLI composition should call Settings registration instead of binding random settings types directly.
 - Keep settings models, settings service, and dependency injection registration in separate files.
+- Keep settings validation minimal and centralized in `Settings`; feature services should not duplicate root validation.
 - Settings reload notifications belong to the root `ApplicationSettingsService`; feature services such as profiles should observe that root service and project their own slice without exposing duplicate change events.
 - Keep settings file path ownership in the root `Settings` layer. `ProfilesService` should not accept, expose, or log the settings file path.
 - Profiles choose output explicitly with separate `ControllerOutput` and `MouseOutput` values. Do not reintroduce a vague combined output mode.
+- Resolve raw game profile settings through a simple helper, not a DI service. The resolver owns runtime defaults such as title, working directory, receiver process names, and environment-expanded paths.
 - Put app-owned settings under the `VirtualMouse` root in appsettings. Do not use top-level `Logging` for app settings; it is owned by Microsoft.Extensions.Logging provider configuration.
 - File logging is configured from `VirtualMouse:Logging:LogFile` at startup. Do not add reloadable logging until a real workflow needs it.
 - Keep useful smoke checks as repeatable tests under `tests`, and expose them through `script/test.ps1`.
 - Do not add profiles, routes, input devices, output devices, or session orchestration until the communication foundation is stable.
+- Status commands should use the normal client-to-running-server pipe path, not direct access to an in-process server object.
+- Use `StreamJsonRpc` for Hosting server/client communication. Do not
+  reintroduce manual request envelopes, method-name dispatch helpers, or
+  custom request/response pipe protocols.
