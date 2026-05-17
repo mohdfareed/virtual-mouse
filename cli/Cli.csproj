@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\src\Hosting\Hosting.csproj" />
+    <ProjectReference Include="..\src\Platform\Windows\Platform.Windows.csproj" />
+    <ProjectReference Include="..\src\Profiles\Profiles.csproj" />
     <ProjectReference Include="..\src\SteamInput\SteamInput.csproj" />
     <ProjectReference Include="..\src\Outputs\Outputs.csproj" />
     <ProjectReference Include="..\src\Outputs\Viiper\Outputs.Viiper.csproj" />

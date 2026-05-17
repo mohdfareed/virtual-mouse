@@ -24,7 +24,7 @@ public sealed class ViiperXbox360Output : IXbox360Output, IXbox360FeedbackSource
         OwnershipMutexName,
         "Xbox 360");
 
-    private readonly ViiperOutputSession _session;
+    private readonly ViiperOutputDevice _device;
 
     // MARK: Construction
     // ========================================================================
@@ -33,25 +33,25 @@ public sealed class ViiperXbox360Output : IXbox360Output, IXbox360FeedbackSource
     /// <param name="device">Connected device stream.</param>
     public ViiperXbox360Output(ViiperDevice device)
     {
-        _session = new ViiperOutputSession(device);
+        _device = new ViiperOutputDevice(device);
     }
 
-    private ViiperXbox360Output(ViiperOutputSession session)
+    private ViiperXbox360Output(ViiperOutputDevice device)
     {
-        _session = session;
+        _device = device;
     }
 
     // MARK: Properties
     // ========================================================================
 
     /// <inheritdoc />
-    public bool IsConnected => _session.IsConnected;
+    public bool IsConnected => _device.IsConnected;
 
     /// <summary>Gets the connected bus ID, if known.</summary>
-    public uint? BusId => _session.BusId;
+    public uint? BusId => _device.BusId;
 
     /// <summary>Gets the connected device ID, if known.</summary>
-    public string? DeviceId => _session.DeviceId;
+    public string? DeviceId => _device.DeviceId;
 
     // MARK: Connection
     // ========================================================================
@@ -66,7 +66,7 @@ public sealed class ViiperXbox360Output : IXbox360Output, IXbox360FeedbackSource
         return ViiperOutputConnector.ConnectAsync(
             options,
             DeviceDefinition,
-            session => new ViiperXbox360Output(session),
+            device => new ViiperXbox360Output(device),
             cancellationToken);
     }
 
@@ -84,7 +84,7 @@ public sealed class ViiperXbox360Output : IXbox360Output, IXbox360FeedbackSource
     /// <inheritdoc />
     public ValueTask SendAsync(Xbox360Report report, CancellationToken cancellationToken = default)
     {
-        return new ValueTask(_session
+        return new ValueTask(_device
             .GetDeviceOrThrow("Xbox 360 output is not connected.")
             .SendAsync(MapReport(report), cancellationToken));
     }
@@ -94,7 +94,7 @@ public sealed class ViiperXbox360Output : IXbox360Output, IXbox360FeedbackSource
     {
         ArgumentNullException.ThrowIfNull(handler);
 
-        return _session.ListenOutput(HandleOutputAsync, "Xbox 360 output is not connected.");
+        return _device.ListenOutput(HandleOutputAsync, "Xbox 360 output is not connected.");
 
         async Task HandleOutputAsync(Stream stream)
         {
@@ -115,7 +115,7 @@ public sealed class ViiperXbox360Output : IXbox360Output, IXbox360FeedbackSource
     /// <inheritdoc />
     public ValueTask DisposeAsync()
     {
-        return _session.DisposeAsync();
+        return _device.DisposeAsync();
     }
 
     // MARK: Internal

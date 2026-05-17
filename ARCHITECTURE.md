@@ -9,21 +9,21 @@ Do not move hot-path work into coordination code. Control RPC, profile loading, 
 
 ## Process Roles
 
-### Manager
+### Host
 
-The manager is the long-lived coordinator. It owns durable configuration, active leases, system-wide policy, and cleanup.
+The host is the long-lived coordinator. It owns durable configuration, active client-run state, VIIPER outputs, system-wide policy, and cleanup.
 
 Responsibilities:
 
 - Load and validate configuration.
 - Compute the effective profile for a client.
-- Grant exclusive output leases.
-- Track client heartbeat and status.
+- Select the active client run from foreground/process state.
+- Own VIIPER output devices.
+- Route controller feedback back to the exact controller route that produced the output.
 - Reclaim orphaned owned virtual devices.
-- Apply system policy such as device hiding.
-- Store runtime state that must survive manager restart.
+- Apply system policy when a concrete workflow needs it.
 
-The manager should not be required on the hot path for 1000 Hz input.
+The host may receive controller reports from a client when the input only exists in that client process context. Do not add general coordination work to per-report handling.
 
 ### Client
 
@@ -31,18 +31,21 @@ The client is the route runner for context-sensitive input. It owns the hot path
 
 Responsibilities:
 
+- Start one configured client run.
+- Launch and track the configured process tree.
 - Read contextual input sources such as Steam-routed SDL input.
-- Pair Steam-routed buttons and axes with physical motion when configured.
+- Attach one controller route per client-visible controller.
+- Pair Steam-routed buttons and axes with physical companion data only inside the route that needs the missing feature.
 - Apply route-local gates that must affect the next report immediately.
-- Write directly to the leased output when latency requires it.
-- Report heartbeat and route status to the manager.
-- Release its lease and dispose its output on normal exit.
+- Stream controller reports to the host.
+- Receive route-local feedback such as rumble and apply it to the corresponding SDL source.
+- End its client run on normal exit.
 
-For a 1000 Hz gyro route, prefer client-local input-to-output forwarding over per-report manager IPC.
+For 1000 Hz input, keep the per-report path as direct as possible and avoid logging, allocation-heavy parsing, or general RPC work.
 
 ### Host Routes
 
-Host routes are still valid for inputs that the long-lived process can read directly, such as Raw Input mouse and physical SDL gamepads. Host routes should use the same canonical input/output contracts as client routes.
+Host routes are valid for inputs that the long-lived process can read directly, such as Raw Input mouse. Client controller routes are valid for inputs that only the launched client process can see. Both should use the canonical input/output contracts.
 
 ### Output Transports
 
@@ -64,13 +67,13 @@ Configuration is durable user intent. Runtime state is what is currently happeni
 Global settings are defaults and infrastructure:
 
 - VIIPER or Teensy connection settings.
-- Manager IPC settings.
+- Host IPC settings.
 - Default output transport.
 - Default device hiding policy.
 - Default global gates such as emulation and physical motion.
 - Logging and diagnostics settings.
 
-Global settings should not contain active client leases, process ids, or temporary device ids.
+Global settings should not contain active client runs, process ids, or temporary device ids.
 
 ### Controller Settings
 
@@ -117,19 +120,18 @@ A game entry binds a launch target to a profile:
 
 Game entries should not duplicate profile settings unless they intentionally override them.
 
-### Client Instance State
+### Client Run State
 
-Client instance state is temporary:
+Client run state is temporary:
 
-- Client id.
+- Run id.
 - Active profile id.
 - Game process id.
 - Focus state.
-- Lease id.
+- Controller route ids.
 - Created output device ids.
-- Heartbeat timestamp.
 
-This belongs in manager runtime state, not the durable profile file.
+This belongs in host runtime state, not the durable profile file.
 
 ## Precedence
 
@@ -155,9 +157,9 @@ Recommended layout:
 - `controllers.json`: known controller defaults.
 - `profiles/*.json`: route profiles.
 - `games/*.json`: game bindings.
-- `state.json`: runtime state that must survive manager restart.
+- `state.json`: runtime state that must survive host restart.
 
-`state.json` is not configuration. It should be safe to delete, aside from losing cached leases/status.
+`state.json` is not configuration. It should be safe to delete, aside from losing cached runtime status.
 
 ## Steam Input Configs
 
@@ -176,7 +178,7 @@ Use this placement rule:
 
 - If it reads contextual input, put it in the client/input side.
 - If it writes a device, put it in the output transport side.
-- If it arbitrates ownership or policy, put it in the manager side.
+- If it arbitrates ownership or policy, put it in the host side.
 - If it describes user intent, put it in configuration.
 - If it describes what is currently active, put it in state.
 - If it runs per report, keep it out of JSON, logging, allocation-heavy code, and general RPC.

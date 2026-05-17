@@ -6,7 +6,7 @@ using global::Viiper.Client;
 
 namespace Outputs.Viiper;
 
-internal sealed class ViiperOutputSession : IDisposable, IAsyncDisposable
+internal sealed class ViiperOutputDevice : IDisposable, IAsyncDisposable
 {
     private readonly ViiperClient? _client;
     private readonly ViiperOutputOwnership? _ownership;
@@ -15,7 +15,7 @@ internal sealed class ViiperOutputSession : IDisposable, IAsyncDisposable
     private ViiperDevice? _device;
     private int _isConnected;
 
-    public ViiperOutputSession(
+    public ViiperOutputDevice(
         ViiperDevice device,
         Action<uint, string>? disconnected = null)
     {
@@ -25,7 +25,7 @@ internal sealed class ViiperOutputSession : IDisposable, IAsyncDisposable
         HookDisconnect(device);
     }
 
-    public ViiperOutputSession(
+    public ViiperOutputDevice(
         ViiperClient client,
         ViiperDevice device,
         uint busId,

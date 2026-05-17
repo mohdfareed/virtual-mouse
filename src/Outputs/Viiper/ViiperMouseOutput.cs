@@ -23,7 +23,7 @@ public sealed class ViiperMouseOutput : IMouseOutput, IDisposable, IAsyncDisposa
         OwnershipMutexName,
         "mouse");
 
-    private readonly ViiperOutputSession _session;
+    private readonly ViiperOutputDevice _device;
 
     // MARK: Construction
     // ========================================================================
@@ -34,25 +34,25 @@ public sealed class ViiperMouseOutput : IMouseOutput, IDisposable, IAsyncDisposa
     public ViiperMouseOutput(ViiperDevice device, ILogger? logger = null)
     {
         _ = logger;
-        _session = new ViiperOutputSession(device);
+        _device = new ViiperOutputDevice(device);
     }
 
-    private ViiperMouseOutput(ViiperOutputSession session)
+    private ViiperMouseOutput(ViiperOutputDevice device)
     {
-        _session = session;
+        _device = device;
     }
 
     // MARK: Properties
     // ========================================================================
 
     /// <inheritdoc />
-    public bool IsConnected => _session.IsConnected;
+    public bool IsConnected => _device.IsConnected;
 
     /// <summary>Gets the connected bus ID, if known.</summary>
-    public uint? BusId => _session.BusId;
+    public uint? BusId => _device.BusId;
 
     /// <summary>Gets the connected device ID, if known.</summary>
-    public string? DeviceId => _session.DeviceId;
+    public string? DeviceId => _device.DeviceId;
 
     // MARK: Connection
     // ========================================================================
@@ -67,8 +67,8 @@ public sealed class ViiperMouseOutput : IMouseOutput, IDisposable, IAsyncDisposa
         return ViiperOutputConnector.ConnectExclusiveAsync(
             options,
             DeviceDefinition,
-            "Another VIIPER mouse output session is already active.",
-            session => new ViiperMouseOutput(session),
+            "Another VIIPER mouse output connection is already active.",
+            device => new ViiperMouseOutput(device),
             cancellationToken);
     }
 
@@ -78,7 +78,7 @@ public sealed class ViiperMouseOutput : IMouseOutput, IDisposable, IAsyncDisposa
     /// <inheritdoc />
     public ValueTask SendAsync(MouseReport report, CancellationToken cancellationToken = default)
     {
-        return new ValueTask(_session
+        return new ValueTask(_device
             .GetDeviceOrThrow("Mouse is not connected.")
             .SendAsync(MapReport(report), cancellationToken));
     }
@@ -103,7 +103,7 @@ public sealed class ViiperMouseOutput : IMouseOutput, IDisposable, IAsyncDisposa
     /// <inheritdoc />
     public ValueTask DisposeAsync()
     {
-        return _session.DisposeAsync();
+        return _device.DisposeAsync();
     }
 
     // MARK: Internal

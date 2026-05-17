@@ -14,6 +14,8 @@
 
   <Folder Name="/src/">
     <Project Path="src/Hosting/Hosting.csproj" />
+    <Project Path="src/Platform/Windows/Platform.Windows.csproj" />
+    <Project Path="src/Profiles/Profiles.csproj" />
     <Project Path="src/SteamInput/SteamInput.csproj" />
   </Folder>
 

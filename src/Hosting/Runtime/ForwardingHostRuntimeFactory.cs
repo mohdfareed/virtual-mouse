@@ -13,17 +13,18 @@ internal static class ForwardingHostRuntimeFactory
     {
 #pragma warning disable CA2000
         ForwardingHostState hostState = new();
-        HostedRouteController mouse = new(
+        MouseRouteController mouse = new(
             ForwardingRouteIds.Mouse,
             ct => CreateMouseRouteAsync(options.Viiper, ct),
             options.Logger,
             () => hostState.EmulationEnabled);
-        GamepadControllerRegistry gamepads = new(options.Viiper, hostState, options.Logger);
+        ClientRunStore runs = new(options.Profiles, options.Viiper, hostState, options.Logger);
 
         return new ForwardingHostRuntime(
             mouse,
-            gamepads,
-            hostState);
+            runs,
+            hostState,
+            options.Logger);
 #pragma warning restore CA2000
     }
 

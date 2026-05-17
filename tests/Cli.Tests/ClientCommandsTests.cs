@@ -2,25 +2,29 @@ using System.CommandLine;
 
 namespace Cli.Tests;
 
+#pragma warning disable CA1416
+
 /// <summary>Tests for client CLI helpers.</summary>
 [TestClass]
 public sealed class ClientCommandsTests
 {
-    /// <summary>Checks client run accepts a route-less session.</summary>
+    /// <summary>Checks client run requires a profile id.</summary>
     [TestMethod]
-    public void ClientRunAcceptsRouteLessSession()
+    public void ClientRunRequiresProfile()
     {
         ParseResult result = ClientCommands.CreateClientCommand().Parse("run");
 
-        Assert.HasCount(0, result.Errors);
+        Assert.AreNotEqual(0, result.Errors.Count);
     }
 
-    /// <summary>Checks client run accepts a mouse session.</summary>
+    /// <summary>Checks client run accepts a profile id.</summary>
     [TestMethod]
-    public void ClientRunAcceptsMouseSession()
+    public void ClientRunAcceptsProfile()
     {
-        ParseResult result = ClientCommands.CreateClientCommand().Parse("run --mouse");
+        ParseResult result = ClientCommands.CreateClientCommand().Parse("run test-game");
 
         Assert.HasCount(0, result.Errors);
     }
 }
+
+#pragma warning restore CA1416

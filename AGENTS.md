@@ -73,16 +73,16 @@ Do not set `LangVersion=latest`.
 - SDL gamepad input should be event-driven through SDL events such as gamepad update-complete and sensor-update events, not an input polling loop.
 - Do not add a shared factory or transport manager unless explicitly requested.
 - Do not add a shared cross-transport options type.
-- `IMouseOutput` represents a usable mouse session, not a transport factory.
-- `IMouseInputSource` represents a usable mouse input session.
+- `IMouseOutput` represents a usable mouse output connection, not a transport factory.
+- `IMouseInputSource` represents a usable mouse input connection.
 - Use direct callbacks for virtual mouse input hot paths; do not add event queues or buffering unless explicitly requested.
 - Push back when a requested change leaks caller responsibility into this repository, expands scope, or adds avoidable hot-path overhead.
 - Treat 1000 Hz mouse-rate input and sub-2-5 ms added latency as hot-path design targets.
 - Keep hot-path performance and benchmark-able boundaries as top priorities when shaping shared interfaces and transport code.
 - Prefer one local host process for production forwarding. The host owns Raw Input and the physical output transport; other processes should use control IPC instead of running their own forwarding loops.
 - Keep host IPC control-only. Do not forward per-report mouse traffic over IPC unless explicitly revisited.
-- Client control sessions may enable and disable route leases without disconnecting. Disconnecting a client must release any route leases it still holds.
-- Host-owned global forwarding state, such as emulation enabled and physical motion enabled, may be mutated by short-lived clients without taking a forwarding lease.
+- Client control connections may enable and disable route state without disconnecting. Disconnecting a client must release any active client runs it owns.
+- Host-owned global forwarding state, such as emulation enabled and physical motion enabled, may be mutated by short-lived clients without owning a client run.
 - Expose Hosting through normal app-facing `ForwardingServer` and `ForwardingClient` APIs. Keep named-pipe control details behind those types.
 - `ForwardingServer` should remain usable as a Microsoft `IHostedService` so CLI, tray, and WPF app hosts can compose it through Generic Host patterns.
 - Host routes are explicit peers. Do not describe mouse route names as defaults when they are really route-specific names.
@@ -96,15 +96,17 @@ Do not set `LangVersion=latest`.
 - Keep the Steam Input control API to caller-facing actions: force a config, clear forcing, and open controller config. Do not expose URI builders, duplicate static/instance variants, detected app state, or activation lifetime state without a real workflow.
 - Keep `SteamGame` small for the current CLI: app id, name, entry kind, and one local path. Do not expose Steam shortcut icons, tags, launch options, or raw metadata until a real workflow needs them.
 - Keep VIIPER server probing/startup logic in `src/Outputs/Viiper`; CLI code may orchestrate auto-start but should not own the probing or process-start rules.
-- Keep durable responsibility, profile, configuration, and state ownership rules in `ARCHITECTURE.md`; update it when those decisions change.
-- For context-sensitive 1000 Hz input, prefer client-local hot-path forwarding over per-report manager IPC.
-- Keep manager responsibilities focused on configuration, profile resolution, leases, system policy, heartbeat, and cleanup.
-- Keep client responsibilities focused on contextual input reads, route-local gates, direct output writes when latency requires it, heartbeat, and normal lease release.
-- Separate durable configuration from runtime state. Profiles, games, controllers, and global settings are configuration; active leases, process ids, heartbeat, and created device ids are state.
+- Treat `ARCHITECTURE.md` as reference material, not binding design, when it conflicts with `AGENTS.md`.
+- Keep one host process as the only process writing to VIIPER outputs.
+- Use client-to-host report forwarding for Steam-contextual controller input; Steam-launched clients read Steam-visible controller state and send it to the host.
+- Keep the product scope focused on Steam shortcut orchestration and forwarding Steam Input into games that do not support it correctly, including non-Steam shortcuts and Steam games with missing device features.
+- Keep host responsibilities focused on configuration, profile resolution, foreground active-run selection, VIIPER output ownership, route-local feedback, and cleanup.
+- Keep client responsibilities focused on launching one profile run, reading client-visible SDL controllers, streaming route input to the host, handling route-local feedback, and normal run release.
+- Separate durable configuration from runtime state. Profiles, games, controllers, and global settings are configuration; client runs, controller routes, process ids, and created device ids are state.
 
 ## Current API Direction
 
-- `IMouseOutput` is the base connected-session interface.
+- `IMouseOutput` is the base connected-output interface.
 - `IMouseOutput.FilterInput` is the transport-owned loopback/source filter used by shared forwarding.
 - `Hosting` owns enable/disable/status control for a local forwarding host.
 - Connection entrypoints should live on concrete transport types.
@@ -122,10 +124,10 @@ Do not set `LangVersion=latest`.
 - For virtual controller outputs, use the real controller USB identity expected by games and drivers. Xbox 360 output uses Microsoft `045E:028E`; DS4 should use Sony `054C:05C4` for the original DS4 unless a newer CUH-ZCT2 profile specifically needs `054C:09CC`.
 - Fail on unsupported ranges rather than clamping silently.
 - Keep implementation thin and explicit.
-- Organize VIIPER by responsibility: device-specific outputs under `Mouse` and `Xbox360`, server startup under `Server`, and shared ownership/session/create-connect-reclaim/logging code under `Shared`.
+- Organize VIIPER by responsibility: device-specific outputs under `Mouse` and `Xbox360`, server startup under `Server`, and shared ownership/create-connect-reclaim/logging code under `Shared`.
 - Keep VIIPER public API types in the `Outputs.Viiper` namespace even when files are organized into responsibility folders.
 - Steam nullifier commands should ignore the owned VIIPER output device by VID/PID so the Steam path does not feed back on itself.
-- Use one VIIPER session model: create one route-specific output device on connect and remove it on dispose.
+- Use one VIIPER created-device model: create one route-specific output device on connect and remove it on dispose.
 - For VIIPER-created virtual devices, remove the device and bus before waiting on the connected stream to dispose. The generated client can block while an output read loop waits on the stream; stream shutdown must not block virtual-device removal.
 - Mark created VIIPER devices with fixed route-specific VID/PID pairs and reclaim only those owned devices on startup.
 - Enforce one active VIIPER owner with a named ownership primitive; concurrent instances should fail fast instead of competing, and ownership must be safe across async continuations.
@@ -147,7 +149,7 @@ Do not set `LangVersion=latest`.
 - Put durable source/transport interop logic in `src`; CLI tools should orchestrate and display results, not own reusable forwarding rules.
 - Do not use SDL gamepad list indices as controller identity. SDL gamepad commands and host options should select controllers by stable `SdlGamepadId` or a unique device name, and reconnect should resolve the selected id again instead of reusing a stale list position.
 - Keep SDL connected-source metadata grouped as `SdlGamepadInfo` objects such as `Device` and `MotionDevice`; do not re-expose flattened duplicate properties on `SdlGamepadSource`.
-- The controller path is Steam-launched. First discover and read Steam Input controllers exactly as Steam exposes them, without clearing Steam-provided SDL hiding/filter flags.
+- The controller path is Steam-launched. First discover and read client-visible SDL controllers exactly as Steam exposes them, without clearing Steam-provided SDL hiding/filter flags.
 - Clear Steam-provided SDL hiding/filter flags only as a fallback feature-discovery step after the primary controller is selected and only when the primary lacks a feature the app needs, such as motion. Match the backend physical controller strictly, then use it only for the missing feature. Do not replace primary buttons/axes with fallback physical input.
 - For SDL fallback motion, choose the primary controller from the normal Steam-visible scan first, then reinitialize SDL with controller filters cleared before opening handles. Keep those process-local SDL filters cleared for the lifetime of the source if a backend motion device is open, then restore them on source disposal.
 - Do not expose SDL diagnostic/filter-clearing switches as public source options. Filter clearing is an internal fallback detail, not caller policy.
@@ -157,13 +159,25 @@ Do not set `LangVersion=latest`.
 
 ## Gamepad Hosting Notes
 
-- The Steam-launched client owns Steam Input visibility and forwards Steam-routed controller state to the host.
-- A Steam-launched client must forward only Steam Input SDL controllers with Steam handles. Do not attach ordinary physical controllers or VIIPER virtual outputs discovered in the Steam process.
-- The host owns physical SDL readers, VIIPER outputs, and merging Steam state with physical-only features such as motion.
-- Use one host slot per physical controller id. A slot owns one physical SDL reader loop, one VIIPER output, and zero or more attached Steam client sessions.
-- Client close or pipe break must detach only that client session. When the last session detaches from a slot, dispose that slot and its VIIPER output.
+- Model gamepad hosting as `ClientRun -> ControllerRoute -> VIIPER output`, with optional route-local native-feature companions added only when needed.
+- The Steam-launched client owns Steam Input visibility and forwards client-visible SDL controller state to the host.
+- A Steam-launched client must forward all non-VIIPER SDL controllers visible to that process. Steam may expose a controller as physical when Steam Input is disabled for that controller.
+- The host owns VIIPER outputs and active-run gating. Do not create a global physical-controller slot registry.
+- Support multiple clients. Each client run may attach multiple controller routes.
+- Treat simultaneous clients as separate launched game processes. Only one client run should be active at a time based on foreground/need, not attach order.
+- Do not over-model impossible conflicts. Steam-launched clients for different games will usually see the same Steam Input controllers mapped to the same physical controllers; inactive clients should not drive outputs.
+- Steam-launched clients should provide a profile name/id when starting a client run. The host resolves that profile and uses its observed process rules to decide when the run is active.
+- Controller route pipes between client and host are bidirectional for MVP: client-to-host input reports, and host-to-client feedback such as rumble for that exact route.
+- Rumble must be route-local. Feedback from one virtual output must never be selected through a global controller registry or shared sink.
+- Keep mouse forwarding equally important to controller forwarding. The host should own one shared Raw Input mouse source and one shared VIIPER mouse output for the mouse route.
+- Keep controller output type selectable so future per-game profiles can choose Xbox 360, DS4, or other supported virtual outputs.
+- Keep controller rumble feedback in the MVP and route it back through the corresponding controller route.
+- Use one global emulation enabled gate unless a concrete workflow requires separate mouse/controller gates.
+- Native physical-controller features such as gyro, LEDs, adaptive triggers, and future feature streams should be active only while an active client/profile needs them.
+- Steam Input config forcing is activation orchestration work, not per-report forwarding logic.
+- Client close or pipe break must end only that client run and dispose its controller routes.
 - Physical SDL disconnect should not destroy the VIIPER output while clients remain attached. Mark physical input disconnected and retry opening the physical source.
-- Do not use a global physical gamepad pump that reloads all slots. Each slot owns its own physical reader loop and reconnect behavior.
+- Do not use a global physical gamepad pump or slot registry. Physical companion readers, when added, should belong to the controller route that needs the missing feature.
 - Do not block VIIPER output cleanup on SDL reader shutdown. Cancel the reader, remove the virtual output immediately, and observe reader completion separately.
 
 ## Testing Rules
@@ -175,7 +189,7 @@ Do not set `LangVersion=latest`.
 - For retained CLI tools, prefer `System.CommandLine` over a hand-rolled parser.
 - Keep the CLI project at `cli/Cli.csproj`; do not put it under `tools`.
 - Keep the CLI split into `host` for host lifecycle, `client` for normal host control, `steam` for Steam product features, and `test` for diagnostics and manual tools.
-- Keep daily forwarding under `client run [--route <route>]`, not under top-level device command groups.
+- Keep daily forwarding under `client run <profile>`, not under top-level device command groups.
 - Keep global host-state controls under direct client command groups, for example `client emulation enable|disable|toggle` and `client physical-motion enable|disable|toggle`.
 - Keep one host process that owns all supported routes. Host startup config chooses route-specific setup such as the SDL gamepad device index, while each route connects lazily only when at least one client enables it.
 - Keep diagnostics such as probes, raw input viewers, nullifiers, synthetic button presses, and benchmark commands under `test`, not under product-facing command groups.

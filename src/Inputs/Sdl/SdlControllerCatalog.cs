@@ -18,8 +18,20 @@ public static class SdlControllerCatalog
         });
     }
 
+    /// <summary>Opens all controllers visible to a client process.</summary>
+    public static IReadOnlyList<SdlGamepadSource> OpenClientControllers()
+    {
+        return OpenControllers(ShouldOpenClientController);
+    }
+
     /// <summary>Opens all Steam Input controllers visible to a client process.</summary>
     public static IReadOnlyList<SdlGamepadSource> OpenSteamControllers()
+    {
+        return OpenControllers(ShouldOpenSteamController);
+    }
+
+    private static IReadOnlyList<SdlGamepadSource> OpenControllers(
+        Func<SdlControllerInfo, bool> shouldOpen)
     {
         return WithSdlErrors<IReadOnlyList<SdlGamepadSource>>(() =>
         {
@@ -41,7 +53,7 @@ public static class SdlControllerCatalog
                         }
 
                         SdlControllerInfo controller = CreateOpenControllerInfo(gamepadIds[i], gamepad);
-                        if (!ShouldOpenSteamController(controller))
+                        if (!shouldOpen(controller))
                         {
                             continue;
                         }
@@ -116,6 +128,12 @@ public static class SdlControllerCatalog
     {
         ArgumentNullException.ThrowIfNull(controller);
         return controller.Source == SdlControllerSource.Steam && controller.SteamHandle != 0;
+    }
+
+    private static bool ShouldOpenClientController(SdlControllerInfo controller)
+    {
+        ArgumentNullException.ThrowIfNull(controller);
+        return controller.Source is SdlControllerSource.Steam or SdlControllerSource.Physical;
     }
 
     internal static InvalidOperationException CreateSdlUnavailableException(Exception exception)

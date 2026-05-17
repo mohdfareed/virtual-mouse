@@ -13,6 +13,9 @@
     <ProjectReference Include="..\Inputs\Sdl\Inputs.Sdl.csproj" />
     <ProjectReference Include="..\Outputs\Outputs.csproj" />
     <ProjectReference Include="..\Outputs\Viiper\Outputs.Viiper.csproj" />
+    <ProjectReference Include="..\Platform\Windows\Platform.Windows.csproj" />
+    <ProjectReference Include="..\Profiles\Profiles.csproj" />
+    <ProjectReference Include="..\SteamInput\SteamInput.csproj" />
   </ItemGroup>
 
   <ItemGroup>

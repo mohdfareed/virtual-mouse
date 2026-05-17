@@ -109,7 +109,7 @@ internal sealed class ForwardingHost(
         if (remaining < 0)
         {
             _ = Interlocked.Exchange(ref _enabledLeaseCount, 0);
-            throw new InvalidOperationException("Host enable leases are unbalanced.");
+            throw new InvalidOperationException("Host enable handles are unbalanced.");
         }
 
         ForwardingHostLog.Released(logger, RouteId, remaining);

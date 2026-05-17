@@ -83,7 +83,7 @@ internal sealed class ForwardingHostServer(
             ((Stream)target!).Dispose();
         }, stream);
 
-        ForwardingHostControlSession target = new(runtime, requestStop, logger);
+        ForwardingHostControlConnection target = new(runtime, requestStop, logger);
         using JsonRpc rpc = JsonRpc.Attach(stream, target);
 
         try
@@ -115,18 +115,24 @@ internal partial interface IForwardingHostControl
 
     Task<bool> TogglePhysicalMotionEnabledAsync();
 
-    Task<GamepadReportSessionInfo> AttachSteamControllerAsync(SdlControllerInfo controller);
+    Task<ClientRunInfo> StartRunAsync(ClientRunRequest request);
+
+    Task ActivateRunAsync(Guid runId, int rootProcessId);
+
+    Task<ControllerRouteInfo> AttachControllerRouteAsync(Guid runId, SdlControllerInfo controller);
+
+    Task EndRunAsync(Guid runId);
 
     Task StopAsync();
 }
 
-internal sealed class ForwardingHostControlSession(
+internal sealed class ForwardingHostControlConnection(
     ForwardingHostRuntime runtime,
     Action? requestStop,
     ILogger? logger) : IForwardingHostControl, IDisposable
 {
-    private IDisposable? _mouseLease;
-    private readonly List<Guid> _gamepadSessions = [];
+    private bool _mouseWanted;
+    private readonly List<Guid> _clientRuns = [];
 
     public Task<ForwardingHostStatus> GetStatusAsync()
     {
@@ -137,20 +143,16 @@ internal sealed class ForwardingHostControlSession(
     public async Task EnableMouseAsync()
     {
         ForwardingHostControlLog.ReceivedCommand(logger, nameof(EnableMouseAsync));
-        if (_mouseLease is not null)
-        {
-            return;
-        }
-
-        _mouseLease = await runtime.EnableMouseAsync(CancellationToken.None).ConfigureAwait(false);
-        ForwardingHostControlLog.LeaseOpened(logger, ForwardingRouteIds.Mouse);
+        _mouseWanted = true;
+        await runtime.SetMouseWantedAsync(wanted: true, CancellationToken.None).ConfigureAwait(false);
+        ForwardingHostControlLog.RouteWanted(logger, ForwardingRouteIds.Mouse);
     }
 
-    public Task DisableMouseAsync()
+    public async Task DisableMouseAsync()
     {
         ForwardingHostControlLog.ReceivedCommand(logger, nameof(DisableMouseAsync));
-        ReleaseMouseLease();
-        return Task.CompletedTask;
+        _mouseWanted = false;
+        await runtime.SetMouseWantedAsync(wanted: false, CancellationToken.None).ConfigureAwait(false);
     }
 
     public Task SetEmulationEnabledAsync(bool enabled)
@@ -177,14 +179,35 @@ internal sealed class ForwardingHostControlSession(
         return runtime.TogglePhysicalMotionEnabledAsync();
     }
 
-    public async Task<GamepadReportSessionInfo> AttachSteamControllerAsync(SdlControllerInfo controller)
+    public async Task<ClientRunInfo> StartRunAsync(ClientRunRequest request)
     {
-        ForwardingHostControlLog.ReceivedCommand(logger, nameof(AttachSteamControllerAsync));
-        GamepadReportSessionInfo session = await runtime
-            .AttachSteamControllerAsync(controller, CancellationToken.None)
+        ForwardingHostControlLog.ReceivedCommand(logger, nameof(StartRunAsync));
+        ClientRunInfo run = await runtime
+            .StartRunAsync(request, CancellationToken.None)
             .ConfigureAwait(false);
-        _gamepadSessions.Add(session.SessionId);
-        return session;
+        _clientRuns.Add(run.RunId);
+        return run;
+    }
+
+    public Task ActivateRunAsync(Guid runId, int rootProcessId)
+    {
+        ForwardingHostControlLog.ReceivedCommand(logger, nameof(ActivateRunAsync));
+        return runtime.ActivateRunAsync(runId, rootProcessId);
+    }
+
+    public Task<ControllerRouteInfo> AttachControllerRouteAsync(
+        Guid runId,
+        SdlControllerInfo controller)
+    {
+        ForwardingHostControlLog.ReceivedCommand(logger, nameof(AttachControllerRouteAsync));
+        return runtime.AttachControllerRouteAsync(runId, controller, CancellationToken.None);
+    }
+
+    public Task EndRunAsync(Guid runId)
+    {
+        ForwardingHostControlLog.ReceivedCommand(logger, nameof(EndRunAsync));
+        _ = _clientRuns.Remove(runId);
+        return runtime.EndRunAsync(runId);
     }
 
     public Task StopAsync()
@@ -196,23 +219,18 @@ internal sealed class ForwardingHostControlSession(
 
     public void Dispose()
     {
-        ReleaseMouseLease();
-        foreach (Guid sessionId in _gamepadSessions)
+        if (_mouseWanted)
         {
-            runtime.DetachSteamControllerAsync(sessionId).GetAwaiter().GetResult();
+            runtime.SetMouseWantedAsync(wanted: false, CancellationToken.None).GetAwaiter().GetResult();
+            _mouseWanted = false;
         }
 
-        _gamepadSessions.Clear();
-    }
-
-    private void ReleaseMouseLease()
-    {
-        IDisposable? lease = Interlocked.Exchange(ref _mouseLease, null);
-        if (lease is not null)
+        foreach (Guid runId in _clientRuns)
         {
-            lease.Dispose();
-            ForwardingHostControlLog.LeaseClosed(logger, ForwardingRouteIds.Mouse);
+            runtime.EndRunAsync(runId).GetAwaiter().GetResult();
         }
+
+        _clientRuns.Clear();
     }
 }
 
@@ -236,17 +254,11 @@ internal static class ForwardingHostControlLog
             new EventId(3, nameof(ReceivedCommand)),
             "Received host control command {Command}.");
 
-    private static readonly Action<ILogger, string, Exception?> LeaseOpenedMessage =
+    private static readonly Action<ILogger, string, Exception?> RouteWantedMessage =
         LoggerMessage.Define<string>(
             LogLevel.Information,
-            new EventId(4, nameof(LeaseOpened)),
-            "Host enable lease opened for route {RouteId}.");
-
-    private static readonly Action<ILogger, string, Exception?> LeaseClosedMessage =
-        LoggerMessage.Define<string>(
-            LogLevel.Information,
-            new EventId(5, nameof(LeaseClosed)),
-            "Host enable lease closed for route {RouteId}.");
+            new EventId(4, nameof(RouteWanted)),
+            "Host route {RouteId} requested.");
 
     public static void StartingServer(ILogger? logger, string pipeName)
     {
@@ -272,19 +284,11 @@ internal static class ForwardingHostControlLog
         }
     }
 
-    public static void LeaseOpened(ILogger? logger, string routeId)
+    public static void RouteWanted(ILogger? logger, string routeId)
     {
         if (logger is not null)
         {
-            LeaseOpenedMessage(logger, routeId, null);
-        }
-    }
-
-    public static void LeaseClosed(ILogger? logger, string routeId)
-    {
-        if (logger is not null)
-        {
-            LeaseClosedMessage(logger, routeId, null);
+            RouteWantedMessage(logger, routeId, null);
         }
     }
 }

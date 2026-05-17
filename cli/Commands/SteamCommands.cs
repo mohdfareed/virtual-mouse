@@ -2,8 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.CommandLine;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Profiles;
 using SteamInput;
 
 internal static class SteamCommands
@@ -11,13 +15,14 @@ internal static class SteamCommands
     // MARK: Commands
     // ========================================================================
 
-    internal static Command CreateSteamCommand()
+    internal static Command CreateSteamCommand(IServiceProvider? services = null)
     {
         Command command = new("steam", "Inspect and control Steam Input.");
         command.Subcommands.Add(CreateListCommand());
         command.Subcommands.Add(CreateForceCommand());
         command.Subcommands.Add(CreateClearCommand());
         command.Subcommands.Add(CreateOpenConfigCommand());
+        command.Subcommands.Add(CreateSrmCommand(services));
         return command;
     }
 
@@ -103,6 +108,39 @@ internal static class SteamCommands
             SteamInputClient client = new();
             await client.OpenControllerConfigAsync(appId, cancellationToken).ConfigureAwait(false);
             await Console.Out.WriteLineAsync($"opened appid={appId.ToString(CultureInfo.InvariantCulture)}").ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
+    private static Command CreateSrmCommand(IServiceProvider? services)
+    {
+        Command command = new("srm", "Export Steam ROM Manager manifests.");
+        command.Subcommands.Add(CreateSrmExportCommand(services));
+        return command;
+    }
+
+    private static Command CreateSrmExportCommand(IServiceProvider? services)
+    {
+        Command command = new("export", "Export configured profiles as Steam ROM Manager entries.");
+        command.SetAction(async (_, _) =>
+        {
+            IReadOnlyDictionary<string, GameProfile> profiles = services?
+                .GetService<IReadOnlyDictionary<string, GameProfile>>() ??
+                new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase);
+            SteamRomManagerSettings settings = services?
+                .GetService<IOptions<SteamRomManagerSettings>>()?
+                .Value ?? new SteamRomManagerSettings();
+
+            string manifestPath = string.IsNullOrWhiteSpace(settings.ManifestPath)
+                ? Path.Combine(AppContext.BaseDirectory, "srm", "games.json")
+                : Environment.ExpandEnvironmentVariables(settings.ManifestPath);
+            string executablePath = Environment.ProcessPath ??
+                throw new InvalidOperationException("Could not resolve executable path.");
+
+            SteamRomManagerExport.Write(profiles, executablePath, manifestPath);
+            await Console.Out.WriteLineAsync($"srm manifest={manifestPath} profiles={profiles.Count}")
+                .ConfigureAwait(false);
         });
 
         return command;

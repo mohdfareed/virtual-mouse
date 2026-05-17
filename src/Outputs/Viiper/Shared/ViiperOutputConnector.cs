@@ -12,7 +12,7 @@ internal static class ViiperOutputConnector
     public static async Task<TOutput> ConnectAsync<TOutput>(
         ViiperOptions options,
         ViiperOutputDeviceDefinition definition,
-        Func<ViiperOutputSession, TOutput> createOutput,
+        Func<ViiperOutputDevice, TOutput> createOutput,
         CancellationToken cancellationToken)
     {
         return await ConnectAsync(
@@ -28,7 +28,7 @@ internal static class ViiperOutputConnector
         ViiperOptions options,
         ViiperOutputDeviceDefinition definition,
         string ownershipErrorMessage,
-        Func<ViiperOutputSession, TOutput> createOutput,
+        Func<ViiperOutputDevice, TOutput> createOutput,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -71,7 +71,7 @@ internal static class ViiperOutputConnector
         ViiperOptions options,
         ViiperOutputDeviceDefinition definition,
         ViiperOutputOwnership? ownership,
-        Func<ViiperOutputSession, TOutput> createOutput,
+        Func<ViiperOutputDevice, TOutput> createOutput,
         CancellationToken cancellationToken)
     {
         ViiperClient? client = new(options.Host, options.Port, options.Password);
@@ -189,10 +189,10 @@ internal static class ViiperOutputConnector
         ViiperOutputOwnership? ownership,
         ViiperOutputDeviceDefinition definition,
         ILogger? logger,
-        Func<ViiperOutputSession, TOutput> createOutput,
+        Func<ViiperOutputDevice, TOutput> createOutput,
         CancellationToken cancellationToken)
     {
-        ViiperDevice device = await client.ConnectDeviceAsync(
+        ViiperDevice stream = await client.ConnectDeviceAsync(
             createdDevice.BusID,
             createdDevice.DevId,
             cancellationToken).ConfigureAwait(false);
@@ -204,9 +204,9 @@ internal static class ViiperOutputConnector
             createdDevice.DevId);
 
 #pragma warning disable CA2000 // Ownership transfers to the output instance created below.
-        ViiperOutputSession session = new(
+        ViiperOutputDevice outputDevice = new(
             client,
-            device,
+            stream,
             createdDevice.BusID,
             createdDevice.DevId,
             ownership,
@@ -214,7 +214,7 @@ internal static class ViiperOutputConnector
             (busId, deviceId) => ViiperOutputLog.DisconnectedDevice(logger, definition.DisplayName, busId, deviceId));
 #pragma warning restore CA2000
 
-        return createOutput(session);
+        return createOutput(outputDevice);
     }
 
     private static async Task RemoveCreatedDeviceAsync(

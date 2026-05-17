@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Outputs.Viiper;
+using Profiles;
 
 namespace Hosting;
 
@@ -20,12 +21,14 @@ public readonly record struct ForwardingRouteStatus(
 
 /// <summary>Host status reported by the local forwarding server.</summary>
 /// <param name="Mouse">Mouse route status.</param>
-/// <param name="Gamepads">Server-owned gamepad controller slots.</param>
+/// <param name="ControllerRoutes">Active controller routes.</param>
+/// <param name="ClientRuns">Registered client runs.</param>
 /// <param name="EmulationEnabled">Whether emulation reports are currently forwarded.</param>
 /// <param name="PhysicalMotionEnabled">Whether physical motion data is currently forwarded.</param>
 public readonly record struct ForwardingHostStatus(
     ForwardingRouteStatus Mouse,
-    IReadOnlyList<GamepadControllerSlotStatus> Gamepads,
+    IReadOnlyList<ControllerRouteStatus> ControllerRoutes,
+    IReadOnlyList<ClientRunStatus> ClientRuns,
     bool EmulationEnabled,
     bool PhysicalMotionEnabled);
 
@@ -34,6 +37,9 @@ public sealed record ForwardingServerOptions
 {
     /// <summary>VIIPER connection options.</summary>
     public required ViiperOptions Viiper { get; init; }
+
+    /// <summary>Configured game profiles.</summary>
+    public required IReadOnlyDictionary<string, GameProfile> Profiles { get; init; }
 
     /// <summary>Lifecycle logger.</summary>
     public ILogger? Logger { get; init; }
@@ -118,6 +124,7 @@ public sealed class ForwardingServer(ForwardingServerOptions options) : IHostedS
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(options.Viiper);
+        ArgumentNullException.ThrowIfNull(options.Profiles);
         using HostSingleInstance instance = HostSingleInstance.TryAcquire(OwnershipName) ??
             throw new InvalidOperationException("Another forwarding host is already running.");
 

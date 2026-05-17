@@ -42,8 +42,8 @@ public sealed class ForwardingClient
 
     private string PipeName { get; } = ForwardingServer.PipeName;
 
-    /// <summary>Connects to the host until the returned session is disposed.</summary>
-    public async Task<ForwardingClientSession> ConnectAsync(CancellationToken cancellationToken = default)
+    /// <summary>Connects to the host until the returned connection is disposed.</summary>
+    public async Task<ForwardingClientConnection> ConnectAsync(CancellationToken cancellationToken = default)
     {
         NamedPipeClientStream pipe = CreatePipe();
 
@@ -51,7 +51,7 @@ public sealed class ForwardingClient
         {
             await ConnectAsync(pipe, cancellationToken).ConfigureAwait(false);
             IForwardingHostControl proxy = JsonRpc.Attach<IForwardingHostControl>(pipe);
-            return new ForwardingClientSession(pipe, proxy);
+            return new ForwardingClientConnection(pipe, proxy);
         }
         catch
         {
@@ -60,19 +60,19 @@ public sealed class ForwardingClient
         }
     }
 
-    /// <summary>Connects to the host and enables mouse forwarding until the returned session is disposed.</summary>
-    public async Task<ForwardingClientSession> EnableMouseAsync(CancellationToken cancellationToken = default)
+    /// <summary>Connects to the host and enables mouse forwarding until the returned connection is disposed.</summary>
+    public async Task<ForwardingClientConnection> EnableMouseAsync(CancellationToken cancellationToken = default)
     {
-        ForwardingClientSession session = await ConnectAsync(cancellationToken).ConfigureAwait(false);
+        ForwardingClientConnection connection = await ConnectAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            await session.EnableMouseAsync(cancellationToken).ConfigureAwait(false);
-            return session;
+            await connection.EnableMouseAsync(cancellationToken).ConfigureAwait(false);
+            return connection;
         }
         catch
         {
-            await session.DisposeAsync().ConfigureAwait(false);
+            await connection.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -172,13 +172,13 @@ public sealed class ForwardingClient
     }
 }
 
-/// <summary>Keeps a host control session alive while connected.</summary>
-public sealed class ForwardingClientSession : IAsyncDisposable, IDisposable
+/// <summary>Keeps a host control connection alive.</summary>
+public sealed class ForwardingClientConnection : IAsyncDisposable, IDisposable
 {
     private NamedPipeClientStream? _pipe;
     private IForwardingHostControl? _proxy;
 
-    internal ForwardingClientSession(
+    internal ForwardingClientConnection(
         NamedPipeClientStream pipe,
         IForwardingHostControl proxy)
     {
@@ -186,59 +186,86 @@ public sealed class ForwardingClientSession : IAsyncDisposable, IDisposable
         _proxy = proxy;
     }
 
-    /// <summary>Enables mouse forwarding on this session.</summary>
+    /// <summary>Enables mouse forwarding on this connection.</summary>
     public Task EnableMouseAsync(CancellationToken cancellationToken = default)
     {
         IForwardingHostControl proxy = GetProxy();
         return proxy.EnableMouseAsync().WaitAsync(cancellationToken);
     }
 
-    /// <summary>Disables mouse forwarding on this session without disconnecting.</summary>
+    /// <summary>Disables mouse forwarding on this connection without disconnecting.</summary>
     public Task DisableMouseAsync(CancellationToken cancellationToken = default)
     {
         IForwardingHostControl proxy = GetProxy();
         return proxy.DisableMouseAsync().WaitAsync(cancellationToken);
     }
 
-    /// <summary>Sets whether emulation reports are forwarded without disconnecting this session.</summary>
+    /// <summary>Sets whether emulation reports are forwarded without disconnecting.</summary>
     public Task SetEmulationEnabledAsync(bool enabled, CancellationToken cancellationToken = default)
     {
         IForwardingHostControl proxy = GetProxy();
         return proxy.SetEmulationEnabledAsync(enabled).WaitAsync(cancellationToken);
     }
 
-    /// <summary>Toggles whether emulation reports are forwarded without disconnecting this session.</summary>
+    /// <summary>Toggles whether emulation reports are forwarded without disconnecting.</summary>
     public Task<bool> ToggleEmulationEnabledAsync(CancellationToken cancellationToken = default)
     {
         IForwardingHostControl proxy = GetProxy();
         return proxy.ToggleEmulationEnabledAsync().WaitAsync(cancellationToken);
     }
 
-    /// <summary>Sets whether physical motion data is forwarded without disconnecting this session.</summary>
+    /// <summary>Sets whether physical motion data is forwarded without disconnecting.</summary>
     public Task SetPhysicalMotionEnabledAsync(bool enabled, CancellationToken cancellationToken = default)
     {
         IForwardingHostControl proxy = GetProxy();
         return proxy.SetPhysicalMotionEnabledAsync(enabled).WaitAsync(cancellationToken);
     }
 
-    /// <summary>Toggles whether physical motion data is forwarded without disconnecting this session.</summary>
+    /// <summary>Toggles whether physical motion data is forwarded without disconnecting.</summary>
     public Task<bool> TogglePhysicalMotionEnabledAsync(CancellationToken cancellationToken = default)
     {
         IForwardingHostControl proxy = GetProxy();
         return proxy.TogglePhysicalMotionEnabledAsync().WaitAsync(cancellationToken);
     }
 
-    /// <summary>Attaches a Steam Input controller to a server-owned physical controller slot.</summary>
-    public async Task<GamepadReportClient> AttachSteamControllerAsync(
+    /// <summary>Starts a profile-backed client run.</summary>
+    public Task<ClientRunInfo> StartRunAsync(
+        ClientRunRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        IForwardingHostControl proxy = GetProxy();
+        return proxy.StartRunAsync(request).WaitAsync(cancellationToken);
+    }
+
+    /// <summary>Activates a client run after launching the root process.</summary>
+    public Task ActivateRunAsync(
+        Guid runId,
+        int rootProcessId,
+        CancellationToken cancellationToken = default)
+    {
+        IForwardingHostControl proxy = GetProxy();
+        return proxy.ActivateRunAsync(runId, rootProcessId).WaitAsync(cancellationToken);
+    }
+
+    /// <summary>Attaches a client-visible controller route to a client run.</summary>
+    public async Task<ControllerRouteClient> AttachControllerRouteAsync(
+        Guid runId,
         SdlControllerInfo controller,
         CancellationToken cancellationToken = default)
     {
         IForwardingHostControl proxy = GetProxy();
-        GamepadReportSessionInfo session = await proxy
-            .AttachSteamControllerAsync(controller)
+        ControllerRouteInfo route = await proxy
+            .AttachControllerRouteAsync(runId, controller)
             .WaitAsync(cancellationToken)
             .ConfigureAwait(false);
-        return await GamepadReportClient.ConnectAsync(session, cancellationToken).ConfigureAwait(false);
+        return await ControllerRouteClient.ConnectAsync(route.Pipe, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Ends a client run.</summary>
+    public Task EndRunAsync(Guid runId, CancellationToken cancellationToken = default)
+    {
+        IForwardingHostControl proxy = GetProxy();
+        return proxy.EndRunAsync(runId).WaitAsync(cancellationToken);
     }
 
     /// <inheritdoc />
@@ -265,6 +292,6 @@ public sealed class ForwardingClientSession : IAsyncDisposable, IDisposable
 
     private IForwardingHostControl GetProxy()
     {
-        return _proxy ?? throw new ObjectDisposedException(nameof(ForwardingClientSession));
+        return _proxy ?? throw new ObjectDisposedException(nameof(ForwardingClientConnection));
     }
 }

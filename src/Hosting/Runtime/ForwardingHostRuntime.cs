@@ -3,36 +3,49 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Inputs.Sdl;
 using Microsoft.Extensions.Logging;
 
 namespace Hosting;
 
-internal sealed class HostedRouteController(
+internal sealed class MouseRouteController(
     string routeId,
     Func<CancellationToken, Task<IForwardingRoute>> createRouteAsync,
     ILogger? logger,
     Func<bool>? shouldForward = null) : IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private HostedRouteInstance? _instance;
-    private int _enabledClientCount;
+    private MouseRouteInstance? _instance;
+    private bool _wanted;
 
-    public async Task<IDisposable> EnableAsync(CancellationToken cancellationToken)
+    public async Task SetWantedAsync(bool wanted, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            _instance ??= await HostedRouteInstance.StartAsync(
+            if (_wanted == wanted)
+            {
+                return;
+            }
+
+            _wanted = wanted;
+            if (wanted)
+            {
+                _instance = await MouseRouteInstance.StartAsync(
                     createRouteAsync,
                     logger,
                     shouldForward,
                     cancellationToken)
                 .ConfigureAwait(false);
+                return;
+            }
 
-            _enabledClientCount++;
-            return new HostedRouteLease(Release);
+            MouseRouteInstance? instance = _instance;
+            _instance = null;
+            if (instance is not null)
+            {
+                await instance.DisposeAsync().ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -49,7 +62,7 @@ internal sealed class HostedRouteController(
             return new ForwardingRouteStatus(
                 routeId,
                 _instance?.Host.IsConnected ?? false,
-                _enabledClientCount);
+                _wanted ? 1 : 0);
         }
         finally
         {
@@ -59,12 +72,12 @@ internal sealed class HostedRouteController(
 
     public async ValueTask DisposeAsync()
     {
-        HostedRouteInstance? instance;
+        MouseRouteInstance? instance;
 
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            _enabledClientCount = 0;
+            _wanted = false;
             instance = _instance;
             _instance = null;
         }
@@ -81,54 +94,7 @@ internal sealed class HostedRouteController(
         _gate.Dispose();
     }
 
-    private void Release()
-    {
-        ReleaseAsync().AsTask().GetAwaiter().GetResult();
-    }
-
-    private async ValueTask ReleaseAsync()
-    {
-        HostedRouteInstance? instanceToStop = null;
-
-        await _gate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            _enabledClientCount -= 1;
-            if (_enabledClientCount < 0)
-            {
-                _enabledClientCount = 0;
-                throw new InvalidOperationException("Route enable leases are unbalanced.");
-            }
-
-            if (_enabledClientCount == 0)
-            {
-                instanceToStop = _instance;
-                _instance = null;
-            }
-        }
-        finally
-        {
-            _ = _gate.Release();
-        }
-
-        if (instanceToStop is not null)
-        {
-            await instanceToStop.DisposeAsync().ConfigureAwait(false);
-        }
-    }
-
-    private sealed class HostedRouteLease(Action release) : IDisposable
-    {
-        private Action? _release = release;
-
-        public void Dispose()
-        {
-            Action? current = Interlocked.Exchange(ref _release, null);
-            current?.Invoke();
-        }
-    }
-
-    private sealed class HostedRouteInstance(
+    private sealed class MouseRouteInstance(
         ForwardingHost host,
         IDisposable enableLease,
         CancellationTokenSource cancellationSource,
@@ -136,7 +102,7 @@ internal sealed class HostedRouteController(
     {
         public ForwardingHost Host { get; } = host;
 
-        public static async Task<HostedRouteInstance> StartAsync(
+        public static async Task<MouseRouteInstance> StartAsync(
             Func<CancellationToken, Task<IForwardingRoute>> createRouteAsync,
             ILogger? logger,
             Func<bool>? shouldForward,
@@ -157,7 +123,7 @@ internal sealed class HostedRouteController(
                     try
                     {
                         Task runTask = Task.Run(() => host.Run(runCancellation.Token), CancellationToken.None);
-                        return new HostedRouteInstance(host, enableLease, runCancellation, runTask);
+                        return new MouseRouteInstance(host, enableLease, runCancellation, runTask);
                     }
                     catch
                     {
@@ -209,71 +175,160 @@ internal sealed class HostedRouteController(
     }
 }
 
-internal sealed class ForwardingHostRuntime(
-    HostedRouteController mouse,
-    GamepadControllerRegistry gamepads,
-    ForwardingHostState hostState) : IAsyncDisposable
+internal sealed class ForwardingHostRuntime : IAsyncDisposable
 {
+    private static readonly TimeSpan ActivePollInterval = TimeSpan.FromMilliseconds(250);
+    private readonly MouseRouteController _mouse;
+    private readonly ClientRunStore _runs;
+    private readonly ForwardingHostState _hostState;
+    private readonly ILogger? _logger;
+    private readonly CancellationTokenSource _stopActiveMonitor = new();
+    private readonly Task _activeMonitorTask;
+
+    public ForwardingHostRuntime(
+        MouseRouteController mouse,
+        ClientRunStore runs,
+        ForwardingHostState hostState,
+        ILogger? logger = null)
+    {
+        _mouse = mouse;
+        _runs = runs;
+        _hostState = hostState;
+        _logger = logger;
+        _activeMonitorTask = Task.Run(RunActiveMonitorAsync, CancellationToken.None);
+    }
+
     public Task<ForwardingHostStatus> GetStatusAsync()
     {
         return GetStatusCoreAsync();
     }
 
-    public Task<IDisposable> EnableMouseAsync(CancellationToken cancellationToken)
+    public Task SetMouseWantedAsync(bool wanted, CancellationToken cancellationToken)
     {
-        return mouse.EnableAsync(cancellationToken);
+        return _mouse.SetWantedAsync(wanted, cancellationToken);
     }
 
-    public Task<GamepadReportSessionInfo> AttachSteamControllerAsync(
-        SdlControllerInfo controller,
+    public Task<ClientRunInfo> StartRunAsync(
+        ClientRunRequest request,
         CancellationToken cancellationToken)
     {
-        return gamepads.AttachSteamControllerAsync(controller, cancellationToken);
+        return _runs.StartRunAsync(request, cancellationToken);
     }
 
-    public Task DetachSteamControllerAsync(Guid sessionId)
+    public Task ActivateRunAsync(Guid runId, int rootProcessId)
     {
-        return gamepads.DetachAsync(sessionId);
+        return _runs.ActivateRunAsync(runId, rootProcessId);
+    }
+
+    public Task<ControllerRouteInfo> AttachControllerRouteAsync(
+        Guid runId,
+        Inputs.Sdl.SdlControllerInfo controller,
+        CancellationToken cancellationToken)
+    {
+        return _runs.AttachControllerRouteAsync(runId, controller, cancellationToken);
+    }
+
+    public Task EndRunAsync(Guid runId)
+    {
+        return _runs.EndRunAsync(runId);
     }
 
     public Task SetEmulationEnabledAsync(bool enabled)
     {
-        hostState.SetEmulationEnabled(enabled);
+        _hostState.SetEmulationEnabled(enabled);
         return Task.CompletedTask;
     }
 
     public Task<bool> ToggleEmulationEnabledAsync()
     {
-        return Task.FromResult(hostState.ToggleEmulationEnabled());
+        return Task.FromResult(_hostState.ToggleEmulationEnabled());
     }
 
     public Task SetPhysicalMotionEnabledAsync(bool enabled)
     {
-        hostState.SetPhysicalMotionEnabled(enabled);
+        _hostState.SetPhysicalMotionEnabled(enabled);
         return Task.CompletedTask;
     }
 
     public Task<bool> TogglePhysicalMotionEnabledAsync()
     {
-        return Task.FromResult(hostState.TogglePhysicalMotionEnabled());
+        return Task.FromResult(_hostState.TogglePhysicalMotionEnabled());
     }
 
     public async ValueTask DisposeAsync()
     {
-        await mouse.DisposeAsync().ConfigureAwait(false);
-        await gamepads.DisposeAsync().ConfigureAwait(false);
+        await _stopActiveMonitor.CancelAsync().ConfigureAwait(false);
+        try
+        {
+            await _activeMonitorTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_stopActiveMonitor.IsCancellationRequested)
+        {
+        }
+
+        _stopActiveMonitor.Dispose();
+        await _mouse.DisposeAsync().ConfigureAwait(false);
+        await _runs.DisposeAsync().ConfigureAwait(false);
     }
 
     private async Task<ForwardingHostStatus> GetStatusCoreAsync()
     {
-        ForwardingRouteStatus mouseStatus = await mouse.GetStatusAsync().ConfigureAwait(false);
-        IReadOnlyList<GamepadControllerSlotStatus> gamepadStatuses =
-            await gamepads.GetStatusAsync().ConfigureAwait(false);
+        ForwardingRouteStatus mouseStatus = await _mouse.GetStatusAsync().ConfigureAwait(false);
+        IReadOnlyList<ControllerRouteStatus> controllerRoutes =
+            await _runs.GetRouteStatusAsync().ConfigureAwait(false);
+        IReadOnlyList<ClientRunStatus> clientRuns =
+            await _runs.GetRunStatusAsync().ConfigureAwait(false);
 
         return new ForwardingHostStatus(
             mouseStatus,
-            gamepadStatuses,
-            hostState.EmulationEnabled,
-            hostState.PhysicalMotionEnabled);
+            controllerRoutes,
+            clientRuns,
+            _hostState.EmulationEnabled,
+            _hostState.PhysicalMotionEnabled);
+    }
+
+    private async Task RunActiveMonitorAsync()
+    {
+        while (!_stopActiveMonitor.IsCancellationRequested)
+        {
+            try
+            {
+                ActiveRunState active = await _runs
+                    .RefreshActiveRunAsync()
+                    .ConfigureAwait(false);
+                await _mouse
+                    .SetWantedAsync(active.WantsMouse, _stopActiveMonitor.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (_stopActiveMonitor.IsCancellationRequested)
+            {
+                throw;
+            }
+#pragma warning disable CA1031
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                ForwardingHostRuntimeLog.ActiveMonitorFailed(_logger, exception);
+            }
+
+            await Task.Delay(ActivePollInterval, _stopActiveMonitor.Token).ConfigureAwait(false);
+        }
+    }
+}
+
+internal static class ForwardingHostRuntimeLog
+{
+    private static readonly Action<ILogger, Exception?> ActiveMonitorFailedMessage =
+        LoggerMessage.Define(
+            LogLevel.Warning,
+            new EventId(1, nameof(ActiveMonitorFailed)),
+            "Active profile monitor iteration failed.");
+
+    public static void ActiveMonitorFailed(ILogger? logger, Exception exception)
+    {
+        if (logger is not null)
+        {
+            ActiveMonitorFailedMessage(logger, exception);
+        }
     }
 }

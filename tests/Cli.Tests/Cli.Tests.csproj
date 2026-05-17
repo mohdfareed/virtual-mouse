@@ -14,6 +14,7 @@
     <ProjectReference Include="..\..\cli\Cli.csproj" />
     <ProjectReference Include="..\..\src\Inputs\Inputs.csproj" />
     <ProjectReference Include="..\..\src\Outputs\Outputs.csproj" />
+    <ProjectReference Include="..\..\src\Profiles\Profiles.csproj" />
     <ProjectReference Include="..\..\src\SteamInput\SteamInput.csproj" />
   </ItemGroup>
 

@@ -8,6 +8,7 @@ using Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Profiles;
 
 internal static class HostCommands
 {
@@ -35,6 +36,7 @@ internal static class HostCommands
             ForwardingServerOptions options = new()
             {
                 Viiper = ViiperConnection.CreateViiperOptions(services, logger),
+                Profiles = GetProfiles(services),
                 Logger = logger,
             };
 
@@ -62,7 +64,8 @@ internal static class HostCommands
                 $"physicalMotionEnabled={FormatBool(status.PhysicalMotionEnabled)}")
                 .ConfigureAwait(false);
             await PrintRouteStatusAsync(status.Mouse).ConfigureAwait(false);
-            await PrintGamepadStatusesAsync(status.Gamepads).ConfigureAwait(false);
+            await PrintRunStatusesAsync(status.ClientRuns).ConfigureAwait(false);
+            await PrintControllerRouteStatusesAsync(status.ControllerRoutes).ConfigureAwait(false);
         });
 
         return command;
@@ -157,24 +160,47 @@ internal static class HostCommands
         return factory.CreateLogger("host");
     }
 
+    private static System.Collections.Generic.IReadOnlyDictionary<string, GameProfile> GetProfiles(IServiceProvider? services)
+    {
+        return services?.GetService<System.Collections.Generic.IReadOnlyDictionary<string, GameProfile>>() ??
+            new System.Collections.Generic.Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase);
+    }
+
     private static Task PrintRouteStatusAsync(ForwardingRouteStatus status)
     {
         return Console.Out.WriteLineAsync(
             $"route={status.RouteId} connected={(status.IsConnected ? "true" : "false")} enabledClients={status.EnabledClientCount}");
     }
 
-    private static async Task PrintGamepadStatusesAsync(
-        System.Collections.Generic.IReadOnlyList<GamepadControllerSlotStatus> statuses)
+    private static async Task PrintControllerRouteStatusesAsync(
+        System.Collections.Generic.IReadOnlyList<ControllerRouteStatus> statuses)
     {
-        foreach (GamepadControllerSlotStatus status in statuses)
+        foreach (ControllerRouteStatus status in statuses)
         {
             await Console.Out.WriteLineAsync(
-                $"gamepad physical=\"{status.PhysicalControllerName}\" " +
-                $"id={status.PhysicalControllerId.Value} " +
-                $"clients={status.AttachedClients} " +
-                $"inputConnected={FormatBool(status.InputConnected)} " +
+                $"controllerRoute id={status.RouteId} " +
+                $"run={status.RunId} " +
+                $"controller=\"{status.ControllerName}\" " +
+                $"source={status.ControllerSource} " +
+                $"active={FormatBool(status.IsActive)} " +
                 $"outputConnected={FormatBool(status.OutputConnected)} " +
                 $"output={FormatOutput(status.OutputBusId, status.OutputDeviceId)}")
+                .ConfigureAwait(false);
+        }
+    }
+
+    private static async Task PrintRunStatusesAsync(
+        System.Collections.Generic.IReadOnlyList<ClientRunStatus> statuses)
+    {
+        foreach (ClientRunStatus status in statuses)
+        {
+            await Console.Out.WriteLineAsync(
+                $"clientRun profile={status.ProfileId} " +
+                $"id={status.RunId} " +
+                $"active={FormatBool(status.IsActive)} " +
+                $"rootPid={status.RootProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"} " +
+                $"controllers={status.ControllerRoutes} " +
+                $"steamAppId={status.SteamAppId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}")
                 .ConfigureAwait(false);
         }
     }

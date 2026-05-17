@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Inputs.Sdl;
 using Outputs.Viiper;
+using Profiles;
 
 namespace Hosting.Tests;
 
@@ -74,19 +74,20 @@ public sealed class ForwardingHostTests
         Assert.HasCount(1, output.Reports);
     }
 
-    /// <summary>Checks control session status.</summary>
+    /// <summary>Checks control connection status.</summary>
     [TestMethod]
     public async Task ControlSessionReportsHostState()
     {
         await using ForwardingHostRuntime runtime = CreateRuntime();
-        using ForwardingHostControlSession session = new(runtime, requestStop: null, logger: null);
+        using ForwardingHostControlConnection connection = new(runtime, requestStop: null, logger: null);
 
-        ForwardingHostStatus status = await session.GetStatusAsync().ConfigureAwait(false);
+        ForwardingHostStatus status = await connection.GetStatusAsync().ConfigureAwait(false);
 
         Assert.AreEqual("mouse", status.Mouse.RouteId);
         Assert.AreEqual(0, status.Mouse.EnabledClientCount);
         Assert.IsFalse(status.Mouse.IsConnected);
-        Assert.HasCount(0, status.Gamepads);
+        Assert.HasCount(0, status.ControllerRoutes);
+        Assert.HasCount(0, status.ClientRuns);
         Assert.IsTrue(status.EmulationEnabled);
         Assert.IsTrue(status.PhysicalMotionEnabled);
     }
@@ -113,86 +114,162 @@ public sealed class ForwardingHostTests
         Assert.AreEqual(0, host.EnabledLeaseCount);
     }
 
-    /// <summary>Checks control session enable lease disposal.</summary>
+    /// <summary>Checks control connection enable cleanup.</summary>
     [TestMethod]
-    public async Task ControlSessionEnableLeaseReleasesOnDispose()
+    public async Task ControlConnectionEnableCleanupRunsOnDispose()
     {
         await using ForwardingHostRuntime runtime = CreateRuntime();
-        using ForwardingHostControlSession session = new(runtime, requestStop: null, logger: null);
+        using ForwardingHostControlConnection connection = new(runtime, requestStop: null, logger: null);
 
-        await session.EnableMouseAsync().ConfigureAwait(false);
+        await connection.EnableMouseAsync().ConfigureAwait(false);
 
-        ForwardingHostStatus enabled = await session.GetStatusAsync().ConfigureAwait(false);
+        ForwardingHostStatus enabled = await connection.GetStatusAsync().ConfigureAwait(false);
         Assert.AreEqual(1, enabled.Mouse.EnabledClientCount);
         Assert.IsTrue(enabled.Mouse.IsConnected);
 
-        session.Dispose();
+        connection.Dispose();
 
         ForwardingHostStatus disabled = await runtime.GetStatusAsync().ConfigureAwait(false);
         Assert.AreEqual(0, disabled.Mouse.EnabledClientCount);
         Assert.IsFalse(disabled.Mouse.IsConnected);
     }
 
-    /// <summary>Checks control session route disabling without disconnecting.</summary>
+    /// <summary>Checks control connection route disabling without disconnecting.</summary>
     [TestMethod]
-    public async Task ControlSessionDisableReleasesMouseWithoutDisconnecting()
+    public async Task ControlConnectionDisableReleasesMouseWithoutDisconnecting()
     {
         await using ForwardingHostRuntime runtime = CreateRuntime();
-        using ForwardingHostControlSession session = new(runtime, requestStop: null, logger: null);
+        using ForwardingHostControlConnection connection = new(runtime, requestStop: null, logger: null);
 
-        await session.EnableMouseAsync().ConfigureAwait(false);
-        await session.DisableMouseAsync().ConfigureAwait(false);
+        await connection.EnableMouseAsync().ConfigureAwait(false);
+        await connection.DisableMouseAsync().ConfigureAwait(false);
 
-        ForwardingHostStatus disabled = await session.GetStatusAsync().ConfigureAwait(false);
+        ForwardingHostStatus disabled = await connection.GetStatusAsync().ConfigureAwait(false);
         Assert.AreEqual(0, disabled.Mouse.EnabledClientCount);
         Assert.IsFalse(disabled.Mouse.IsConnected);
     }
 
-    /// <summary>Checks global host state can change without route lease ownership.</summary>
+    /// <summary>Checks global host state can change without owning a client run.</summary>
     [TestMethod]
     public async Task ControlSessionUpdatesGlobalState()
     {
         await using ForwardingHostRuntime runtime = CreateRuntime();
-        using ForwardingHostControlSession session = new(runtime, requestStop: null, logger: null);
+        using ForwardingHostControlConnection connection = new(runtime, requestStop: null, logger: null);
 
-        await session.SetEmulationEnabledAsync(false).ConfigureAwait(false);
-        await session.SetPhysicalMotionEnabledAsync(false).ConfigureAwait(false);
+        await connection.SetEmulationEnabledAsync(false).ConfigureAwait(false);
+        await connection.SetPhysicalMotionEnabledAsync(false).ConfigureAwait(false);
 
-        ForwardingHostStatus disabled = await session.GetStatusAsync().ConfigureAwait(false);
+        ForwardingHostStatus disabled = await connection.GetStatusAsync().ConfigureAwait(false);
         Assert.IsFalse(disabled.EmulationEnabled);
         Assert.IsFalse(disabled.PhysicalMotionEnabled);
 
-        bool emulationToggled = await session.ToggleEmulationEnabledAsync().ConfigureAwait(false);
-        bool physicalMotionToggled = await session.TogglePhysicalMotionEnabledAsync().ConfigureAwait(false);
+        bool emulationToggled = await connection.ToggleEmulationEnabledAsync().ConfigureAwait(false);
+        bool physicalMotionToggled = await connection.TogglePhysicalMotionEnabledAsync().ConfigureAwait(false);
 
-        ForwardingHostStatus enabled = await session.GetStatusAsync().ConfigureAwait(false);
+        ForwardingHostStatus enabled = await connection.GetStatusAsync().ConfigureAwait(false);
         Assert.IsTrue(emulationToggled);
         Assert.IsTrue(physicalMotionToggled);
         Assert.IsTrue(enabled.EmulationEnabled);
         Assert.IsTrue(enabled.PhysicalMotionEnabled);
     }
 
-    /// <summary>Checks that gamepad host attachment rejects direct physical controllers.</summary>
+    /// <summary>Checks client run registration and default receiver process resolution.</summary>
     [TestMethod]
-    public async Task AttachSteamControllerRejectsPhysicalController()
+    public async Task StartRunResolvesConfiguredProfile()
     {
-        await using ForwardingHostRuntime runtime = CreateRuntime();
-        SdlControllerInfo controller = CreateController(SdlControllerSource.Physical);
+        Dictionary<string, GameProfile> profiles = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["test-game"] = new GameProfile
+            {
+                Executable = @"C:\Games\TestGame\Game.exe",
+                ControllerOutput = ControllerOutputKind.None,
+                MouseOutput = MouseOutputKind.None,
+            },
+        };
+        await using ForwardingHostRuntime runtime = CreateRuntime(profiles);
 
-        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
-                () => runtime.AttachSteamControllerAsync(controller, CancellationToken.None))
+        ClientRunInfo run = await runtime
+            .StartRunAsync(new ClientRunRequest("test-game", 123, 456), CancellationToken.None)
             .ConfigureAwait(false);
+
+        Assert.AreEqual("test-game", run.ProfileId);
+        Assert.AreEqual(@"C:\Games\TestGame\Game.exe", run.Executable);
+        Assert.AreEqual("Game.exe", run.ReceiverProcesses[0]);
+
+        ForwardingHostStatus status = await runtime.GetStatusAsync().ConfigureAwait(false);
+        Assert.HasCount(1, status.ClientRuns);
+        Assert.AreEqual(run.RunId, status.ClientRuns[0].RunId);
+
+        await runtime.EndRunAsync(run.RunId).ConfigureAwait(false);
     }
 
-    /// <summary>Checks control session stop callback.</summary>
+    /// <summary>Checks active runs are selected by launched process tree.</summary>
+    [TestMethod]
+    public async Task ActiveRunUsesRootProcessIdentity()
+    {
+        Dictionary<string, GameProfile> profiles = CreateProfiles(mouseOutput: MouseOutputKind.None);
+        ClientRunStore runs = CreateRunStore(
+            profiles,
+            () => 201,
+            (rootProcessId, processId) => rootProcessId == 200 && processId == 201);
+
+        ClientRunInfo first = await runs
+            .StartRunAsync(new ClientRunRequest("test-game", 1, null), CancellationToken.None)
+            .ConfigureAwait(false);
+        ClientRunInfo second = await runs
+            .StartRunAsync(new ClientRunRequest("test-game", 2, null), CancellationToken.None)
+            .ConfigureAwait(false);
+        await runs.ActivateRunAsync(first.RunId, 100).ConfigureAwait(false);
+        await runs.ActivateRunAsync(second.RunId, 200).ConfigureAwait(false);
+
+        _ = await runs.RefreshActiveRunAsync().ConfigureAwait(false);
+        IReadOnlyList<ClientRunStatus> statuses = await runs.GetRunStatusAsync().ConfigureAwait(false);
+
+        Assert.IsFalse(statuses[0].IsActive);
+        Assert.IsTrue(statuses[1].IsActive);
+        Assert.AreEqual(200, statuses[1].RootProcessId);
+
+        await runs.DisposeAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Checks the active monitor survives one failed foreground poll.</summary>
+    [TestMethod]
+    public async Task ActiveMonitorContinuesAfterPollingFailure()
+    {
+        int foregroundCalls = 0;
+        ClientRunStore runs = CreateRunStore(
+            CreateProfiles(mouseOutput: MouseOutputKind.Viiper),
+            () =>
+            {
+                foregroundCalls++;
+                return foregroundCalls == 1
+                    ? throw new InvalidOperationException("simulated foreground failure")
+                : 42;
+            },
+            (rootProcessId, processId) => rootProcessId == 10 && processId == 42);
+        await using ForwardingHostRuntime runtime = CreateRuntime(
+            profiles: null,
+            runs);
+        ClientRunInfo run = await runtime
+            .StartRunAsync(new ClientRunRequest("test-game", 1, null), CancellationToken.None)
+            .ConfigureAwait(false);
+        await runtime.ActivateRunAsync(run.RunId, 10).ConfigureAwait(false);
+
+        await Task.Delay(TimeSpan.FromMilliseconds(700)).ConfigureAwait(false);
+
+        ForwardingHostStatus status = await runtime.GetStatusAsync().ConfigureAwait(false);
+        Assert.AreEqual(1, status.Mouse.EnabledClientCount);
+    }
+
+    /// <summary>Checks control connection stop callback.</summary>
     [TestMethod]
     public async Task ControlSessionStopRequestsServerStop()
     {
         await using ForwardingHostRuntime runtime = CreateRuntime();
         bool stopped = false;
-        using ForwardingHostControlSession session = new(runtime, () => stopped = true, logger: null);
+        using ForwardingHostControlConnection connection = new(runtime, () => stopped = true, logger: null);
 
-        await session.StopAsync().ConfigureAwait(false);
+        await connection.StopAsync().ConfigureAwait(false);
 
         Assert.IsTrue(stopped);
     }
@@ -221,7 +298,7 @@ public sealed class ForwardingHostTests
         }
     }
 
-    /// <summary>Checks mouse disabling through a connected local client session.</summary>
+    /// <summary>Checks mouse disabling through a connected local client connection.</summary>
     [TestMethod]
     public async Task ControlClientSessionCanDisableAndReuseConnection()
     {
@@ -232,9 +309,9 @@ public sealed class ForwardingHostTests
         Task serverTask = server.RunAsync(cancellation.Token);
         ForwardingClient client = new(pipeName, TimeSpan.FromSeconds(2));
 
-        await using ForwardingClientSession session = await client.ConnectAsync().ConfigureAwait(false);
-        await session.EnableMouseAsync().ConfigureAwait(false);
-        await session.DisableMouseAsync().ConfigureAwait(false);
+        await using ForwardingClientConnection connection = await client.ConnectAsync().ConfigureAwait(false);
+        await connection.EnableMouseAsync().ConfigureAwait(false);
+        await connection.DisableMouseAsync().ConfigureAwait(false);
 
         ForwardingHostStatus status = await client.GetStatusAsync().ConfigureAwait(false);
         Assert.AreEqual(0, status.Mouse.EnabledClientCount);
@@ -279,35 +356,51 @@ public sealed class ForwardingHostTests
         Assert.IsNull(second);
     }
 
-    private static ForwardingHostRuntime CreateRuntime()
+    private static ForwardingHostRuntime CreateRuntime(
+        IReadOnlyDictionary<string, GameProfile>? profiles = null,
+        ClientRunStore? runs = null)
     {
         ForwardingHostState hostState = new();
-        HostedRouteController mouse = new(
+        MouseRouteController mouse = new(
             ForwardingRouteIds.Mouse,
             _ => Task.FromResult<IForwardingRoute>(new MouseForwardingRoute(
                 new TestMouseInputSource(),
                 new TestMouseOutput())),
             logger: null,
             () => hostState.EmulationEnabled);
-        GamepadControllerRegistry gamepads = new(new ViiperOptions(), hostState, logger: null);
-        return new ForwardingHostRuntime(mouse, gamepads, hostState);
+        ClientRunStore clientRuns = runs ?? new ClientRunStore(
+            profiles ?? new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase),
+            new ViiperOptions(),
+            hostState,
+            logger: null);
+        return new ForwardingHostRuntime(mouse, clientRuns, hostState);
     }
 
-    private static SdlControllerInfo CreateController(SdlControllerSource source)
+    private static ClientRunStore CreateRunStore(
+        IReadOnlyDictionary<string, GameProfile> profiles,
+        Func<int> getForegroundProcessId,
+        Func<int, int, bool> isProcessInTree)
     {
-        SdlControllerInfo controller = new(
-            new SdlControllerId(
-                source == SdlControllerSource.Steam ? "steam:0000000000000001" : "path:controller-path"),
-            InstanceId: 1,
-            Name: "Controller",
-            source,
-            source == SdlControllerSource.Steam ? 1UL : 0UL,
-            VendorId: 0x045e,
-            ProductId: 0x028e,
-            Path: "controller-path",
-            HasGyro: true,
-            HasAccelerometer: true);
-        return controller;
+        return new ClientRunStore(
+            profiles,
+            new ViiperOptions(),
+            new ForwardingHostState(),
+            logger: null,
+            getForegroundProcessId,
+            isProcessInTree);
+    }
+
+    private static Dictionary<string, GameProfile> CreateProfiles(MouseOutputKind mouseOutput)
+    {
+        return new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["test-game"] = new GameProfile
+            {
+                Executable = @"C:\Games\TestGame\Game.exe",
+                ControllerOutput = ControllerOutputKind.None,
+                MouseOutput = mouseOutput,
+            },
+        };
     }
 
     private static ForwardingHost CreateHost()
