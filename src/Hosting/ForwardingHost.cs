@@ -65,7 +65,10 @@ public sealed class HostSingleInstance : IDisposable
 }
 
 /// <summary>Owns local route forwarding state.</summary>
-public sealed class ForwardingHost(IForwardingRoute route, ILogger? logger = null) : IAsyncDisposable
+public sealed class ForwardingHost(
+    IForwardingRoute route,
+    ILogger? logger = null,
+    Func<bool>? shouldForward = null) : IAsyncDisposable
 {
     private readonly IForwardingRoute _route = route ?? throw new ArgumentNullException(nameof(route));
     private int _enabledLeaseCount;
@@ -98,7 +101,7 @@ public sealed class ForwardingHost(IForwardingRoute route, ILogger? logger = nul
 
         try
         {
-            _route.Run(() => IsEnabled, cancellationToken);
+            _route.Run(() => IsEnabled && (shouldForward?.Invoke() ?? true), cancellationToken);
         }
         finally
         {

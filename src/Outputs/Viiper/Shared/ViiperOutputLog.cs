@@ -29,7 +29,7 @@ internal static class ViiperOutputLog
             new EventId(4, nameof(DisconnectedDevice)),
             "VIIPER {OutputType} device disconnected ({BusId}/{DeviceId}).");
 
-    public static void CreatedDevice(ILogger? logger, string outputType, uint busId)
+    internal static void CreatedDevice(ILogger? logger, string outputType, uint busId)
     {
         if (logger is not null)
         {
@@ -37,7 +37,7 @@ internal static class ViiperOutputLog
         }
     }
 
-    public static void RemovedDevice(ILogger? logger, string outputType, uint busId, string deviceId)
+    internal static void RemovedDevice(ILogger? logger, string outputType, uint busId, string deviceId)
     {
         if (logger is not null)
         {
@@ -45,7 +45,7 @@ internal static class ViiperOutputLog
         }
     }
 
-    public static void ConnectedDevice(ILogger? logger, string outputType, uint busId, string deviceId)
+    internal static void ConnectedDevice(ILogger? logger, string outputType, uint busId, string deviceId)
     {
         if (logger is not null)
         {
@@ -53,7 +53,7 @@ internal static class ViiperOutputLog
         }
     }
 
-    public static void DisconnectedDevice(ILogger? logger, string outputType, uint busId, string deviceId)
+    internal static void DisconnectedDevice(ILogger? logger, string outputType, uint busId, string deviceId)
     {
         if (logger is not null)
         {

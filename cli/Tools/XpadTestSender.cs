@@ -7,7 +7,7 @@ namespace Cli.Tools;
 
 internal static class XpadTestSender
 {
-    public static async Task SendButtonPressAsync(
+    internal static async Task SendButtonPressAsync(
         IXbox360Output output,
         Xbox360Buttons buttons,
         TimeSpan duration,

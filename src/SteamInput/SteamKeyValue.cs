@@ -8,16 +8,16 @@ namespace SteamInput;
 
 internal sealed class SteamKeyValue
 {
-    public Dictionary<string, SteamKeyValue> Children { get; } = new(StringComparer.OrdinalIgnoreCase);
+    internal Dictionary<string, SteamKeyValue> Children { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public string? Value { get; set; }
+    internal string? Value { get; set; }
 
-    public SteamKeyValue? GetChild(string key)
+    internal SteamKeyValue? GetChild(string key)
     {
         return Children.TryGetValue(key, out SteamKeyValue? child) ? child : null;
     }
 
-    public string? GetValue(string key)
+    internal string? GetValue(string key)
     {
         return GetChild(key)?.Value;
     }
@@ -25,14 +25,14 @@ internal sealed class SteamKeyValue
 
 internal static class SteamKeyValueParser
 {
-    public static SteamKeyValue ParseText(string text)
+    internal static SteamKeyValue ParseText(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
         using MemoryStream stream = new(Encoding.UTF8.GetBytes(text));
         return Parse(stream, KVSerializationFormat.KeyValues1Text);
     }
 
-    public static SteamKeyValue ParseBinary(byte[] data)
+    internal static SteamKeyValue ParseBinary(byte[] data)
     {
         ArgumentNullException.ThrowIfNull(data);
         using MemoryStream stream = new(data, writable: false);

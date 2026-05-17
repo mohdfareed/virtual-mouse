@@ -7,7 +7,7 @@ namespace SteamInput;
 
 internal static class SteamInstallLocator
 {
-    public static string? FindSteamPath()
+    internal static string? FindSteamPath()
     {
         string? steamPath = FirstExistingDirectory(
             Environment.GetEnvironmentVariable("SteamPath"),
@@ -24,7 +24,7 @@ internal static class SteamInstallLocator
         return steamPath is null ? null : Path.GetFullPath(steamPath);
     }
 
-    public static uint? FindActiveUserId()
+    internal static uint? FindActiveUserId()
     {
         return TryParseUInt32(ReadRegistryString(@"Software\Valve\Steam\ActiveProcess", "ActiveUser"));
     }

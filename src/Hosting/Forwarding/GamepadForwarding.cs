@@ -3,7 +3,6 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Inputs;
-using Inputs.Sdl;
 using Outputs;
 
 namespace Hosting;
@@ -12,45 +11,6 @@ namespace Hosting;
 /// <param name="input">Gamepad input.</param>
 /// <returns><see langword="true" /> to forward the report.</returns>
 public delegate bool GamepadInputFilter(in GamepadInput input);
-
-/// <summary>Connected gamepad forwarding session.</summary>
-/// <param name="DeviceName">Input device name.</param>
-public readonly record struct GamepadForwardingSession(string DeviceName);
-
-/// <summary>Handles a connected gamepad forwarding session.</summary>
-/// <param name="session">Connected session.</param>
-/// <param name="cancellationToken">Cancellation token.</param>
-public delegate ValueTask GamepadForwardingConnectedHandler(
-    GamepadForwardingSession session,
-    CancellationToken cancellationToken);
-
-/// <summary>Gamepad forwarding helpers.</summary>
-public static class GamepadForwarding
-{
-    /// <summary>Forwards SDL gamepad state to an Xbox 360 output.</summary>
-    public static async Task RunSdlToXbox360Async(
-        IXbox360Output output,
-        SdlGamepadOptions options,
-        GamepadForwardingConnectedHandler? connected = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(output);
-        ArgumentNullException.ThrowIfNull(options);
-
-        using SdlGamepadSource input = await SdlGamepadSource
-            .ConnectAsync(options, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (connected is not null)
-        {
-            await connected(
-                new GamepadForwardingSession(input.DeviceName),
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        input.RunTo(output, cancellationToken);
-    }
-}
 
 /// <summary>Forwards canonical gamepad input to output devices.</summary>
 public static class GamepadForwardingExtensions
@@ -71,10 +31,31 @@ public static class GamepadForwardingExtensions
         GamepadInputFilter? filter,
         CancellationToken cancellationToken = default)
     {
+        input.RunTo(output, filter, shouldForwardMotion: null, cancellationToken);
+    }
+
+    /// <summary>Forwards filtered gamepad state to an Xbox 360 output.</summary>
+    public static void RunTo(
+        this IGamepadInputSource input,
+        IXbox360Output output,
+        GamepadInputFilter? filter,
+        Func<bool>? shouldForwardMotion,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(output);
 
-        input.Run(HandleInput, cancellationToken);
+        using IDisposable? rumbleSubscription = ListenRumble(input, output);
+        bool hasPreviousReport = false;
+        Xbox360Report previousReport = default;
+        try
+        {
+            input.Run(HandleInput, cancellationToken);
+        }
+        finally
+        {
+            StopRumble(input);
+        }
 
         void HandleInput(in GamepadInput source)
         {
@@ -83,11 +64,30 @@ public static class GamepadForwardingExtensions
                 return;
             }
 
-            SendSynchronously(output, ToXbox360Report(source.State), cancellationToken);
+            GamepadState state = FilterMotion(source.State, shouldForwardMotion?.Invoke() ?? true);
+            Xbox360Report report = ToXbox360Report(state);
+            if (hasPreviousReport && report == previousReport)
+            {
+                return;
+            }
+
+            SendSynchronously(output, report, cancellationToken);
+            previousReport = report;
+            hasPreviousReport = true;
         }
     }
 
-    private static Xbox360Report ToXbox360Report(GamepadState state)
+    internal static GamepadState FilterMotion(GamepadState state, bool motionEnabled)
+    {
+        return motionEnabled
+            ? state
+            : state with
+            {
+                Motion = default,
+            };
+    }
+
+    internal static Xbox360Report ToXbox360Report(GamepadState state)
     {
         Xbox360Buttons buttons = Xbox360Buttons.None;
         buttons = Apply(buttons, state.Buttons, GamepadButtons.South, Xbox360Buttons.A);
@@ -116,6 +116,33 @@ public static class GamepadForwardingExtensions
             InvertAxis(state.RightY));
     }
 
+    internal static GamepadRumble ToGamepadRumble(Xbox360Rumble rumble)
+    {
+        return new GamepadRumble(
+            ScaleRumble(rumble.LeftMotor),
+            ScaleRumble(rumble.RightMotor));
+    }
+
+    private static IDisposable? ListenRumble(IGamepadInputSource input, IXbox360Output output)
+    {
+        return input is not IGamepadRumbleSink rumbleSink ||
+            output is not IXbox360FeedbackSource feedbackSource
+            ? null
+            : feedbackSource.ListenRumble(rumble =>
+        {
+            _ = rumbleSink.TryRumble(ToGamepadRumble(rumble));
+            return ValueTask.CompletedTask;
+        });
+    }
+
+    private static void StopRumble(IGamepadInputSource input)
+    {
+        if (input is IGamepadRumbleSink rumbleSink)
+        {
+            _ = rumbleSink.TryRumble(GamepadRumble.Empty);
+        }
+    }
+
     private static Xbox360Buttons Apply(
         Xbox360Buttons output,
         GamepadButtons input,
@@ -133,6 +160,11 @@ public static class GamepadForwardingExtensions
     private static short InvertAxis(short value)
     {
         return value == short.MinValue ? short.MaxValue : (short)-value;
+    }
+
+    private static ushort ScaleRumble(byte value)
+    {
+        return (ushort)(value * 257);
     }
 
     private static void SendSynchronously(

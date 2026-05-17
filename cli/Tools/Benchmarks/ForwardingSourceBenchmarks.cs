@@ -12,7 +12,7 @@ internal static partial class ForwardingBenchmarks
 {
     /// <summary>Measures Raw Input API read/decode to callback.</summary>
     [SupportedOSPlatform("windows")]
-    public static async Task<ForwardingBenchmarkMeasurement> BenchmarkRawInputAsync(
+    internal static async Task<ForwardingBenchmarkMeasurement> BenchmarkRawInputAsync(
         int count,
         IProgress<ForwardingBenchmarkProgress>? progress = null,
         CancellationToken cancellationToken = default)
@@ -71,7 +71,7 @@ internal static partial class ForwardingBenchmarks
     }
 
     /// <summary>Measures SDL update/read to callback.</summary>
-    public static async Task<ForwardingBenchmarkMeasurement> BenchmarkSdlInputAsync(
+    internal static async Task<ForwardingBenchmarkMeasurement> BenchmarkSdlInputAsync(
         int count,
         SdlGamepadOptions options,
         IProgress<ForwardingBenchmarkProgress>? progress = null,

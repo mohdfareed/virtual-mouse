@@ -1,14 +1,17 @@
 using System;
+using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using global::Viiper.Client;
 using global::Viiper.Client.Types;
 using ViiperXbox360Input = global::Viiper.Client.Devices.Xbox360.Xbox360Input;
+using ViiperXbox360OutputReport = global::Viiper.Client.Devices.Xbox360.Xbox360Output;
 
 namespace Outputs.Viiper;
 
 /// <summary>VIIPER Xbox 360 output.</summary>
-public sealed class ViiperXbox360Output : IXbox360Output, IDisposable, IAsyncDisposable
+public sealed class ViiperXbox360Output : IXbox360Output, IXbox360FeedbackSource, IDisposable, IAsyncDisposable
 {
     internal const ushort OwnedVendorId = 0x045E;
     internal const ushort OwnedProductId = 0x028E;
@@ -79,6 +82,20 @@ public sealed class ViiperXbox360Output : IXbox360Output, IDisposable, IAsyncDis
             .SendAsync(MapReport(report), cancellationToken));
     }
 
+    /// <inheritdoc />
+    public IDisposable ListenRumble(Xbox360RumbleHandler handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+
+        return _session.ListenOutput(HandleOutputAsync, "Xbox 360 output is not connected.");
+
+        async Task HandleOutputAsync(Stream stream)
+        {
+            Xbox360Rumble rumble = ReadRumble(stream);
+            await handler(rumble).ConfigureAwait(false);
+        }
+    }
+
     // MARK: Disposal
     // ========================================================================
 
@@ -109,6 +126,17 @@ public sealed class ViiperXbox360Output : IXbox360Output, IDisposable, IAsyncDis
             Rx = report.RightX,
             Ry = report.RightY,
         };
+    }
+
+    internal static Xbox360Rumble MapRumble(ViiperXbox360OutputReport output)
+    {
+        return new Xbox360Rumble(output.Left, output.Right);
+    }
+
+    internal static Xbox360Rumble ReadRumble(Stream stream)
+    {
+        using BinaryReader reader = new(stream, Encoding.UTF8, leaveOpen: true);
+        return MapRumble(ViiperXbox360OutputReport.Read(reader));
     }
 
     internal static bool IsOwnedDevice(Device device)

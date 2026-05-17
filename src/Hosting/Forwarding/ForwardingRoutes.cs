@@ -69,10 +69,12 @@ public sealed class MouseForwardingRoute(
 public sealed class Xbox360ForwardingRoute(
     IGamepadInputSource input,
     IXbox360Output output,
-    string routeId = ForwardingRouteIds.Xpad) : IForwardingRoute
+    string routeId = ForwardingRouteIds.Xpad,
+    Func<bool>? shouldForwardMotion = null) : IForwardingRoute
 {
     private readonly IGamepadInputSource _input = input ?? throw new ArgumentNullException(nameof(input));
     private readonly IXbox360Output _output = output ?? throw new ArgumentNullException(nameof(output));
+    private readonly Func<bool>? _shouldForwardMotion = shouldForwardMotion;
 
     /// <inheritdoc />
     public string RouteId { get; } = string.IsNullOrWhiteSpace(routeId)
@@ -86,7 +88,7 @@ public sealed class Xbox360ForwardingRoute(
     public void Run(Func<bool> shouldForward, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(shouldForward);
-        _input.RunTo(_output, ShouldForward, cancellationToken);
+        _input.RunTo(_output, ShouldForward, _shouldForwardMotion, cancellationToken);
 
         bool ShouldForward(in GamepadInput input)
         {
@@ -100,5 +102,48 @@ public sealed class Xbox360ForwardingRoute(
     {
         await _input.DisposeAsync().ConfigureAwait(false);
         await _output.DisposeAsync().ConfigureAwait(false);
+    }
+}
+
+internal sealed class ForwardingHostState
+{
+    private int _emulationEnabled = 1;
+    private int _physicalMotionEnabled = 1;
+
+    public bool EmulationEnabled => Volatile.Read(ref _emulationEnabled) != 0;
+
+    public bool PhysicalMotionEnabled => Volatile.Read(ref _physicalMotionEnabled) != 0;
+
+    public void SetEmulationEnabled(bool enabled)
+    {
+        _ = Interlocked.Exchange(ref _emulationEnabled, enabled ? 1 : 0);
+    }
+
+    public bool ToggleEmulationEnabled()
+    {
+        return Toggle(ref _emulationEnabled);
+    }
+
+    public void SetPhysicalMotionEnabled(bool enabled)
+    {
+        _ = Interlocked.Exchange(ref _physicalMotionEnabled, enabled ? 1 : 0);
+    }
+
+    public bool TogglePhysicalMotionEnabled()
+    {
+        return Toggle(ref _physicalMotionEnabled);
+    }
+
+    private static bool Toggle(ref int state)
+    {
+        while (true)
+        {
+            int current = Volatile.Read(ref state);
+            int next = current == 0 ? 1 : 0;
+            if (Interlocked.CompareExchange(ref state, next, current) == current)
+            {
+                return next != 0;
+            }
+        }
     }
 }

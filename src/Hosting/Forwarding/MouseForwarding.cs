@@ -1,9 +1,7 @@
 using System;
-using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using Inputs;
-using Inputs.RawInput;
 using Outputs;
 
 namespace Hosting;
@@ -12,25 +10,6 @@ namespace Hosting;
 /// <param name="input">Mouse input.</param>
 /// <returns><see langword="true" /> to forward the report.</returns>
 public delegate bool MouseInputFilter(in MouseInput input);
-
-/// <summary>Mouse forwarding helpers.</summary>
-public static class MouseForwarding
-{
-    /// <summary>Forwards Raw Input mouse reports to a mouse output.</summary>
-    [SupportedOSPlatform("windows")]
-    public static async Task RunRawInputToAsync(
-        IMouseOutput output,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(output);
-
-        using RawInputMouseSource input = await RawInputMouseSource
-            .ConnectAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        input.RunTo(output, cancellationToken);
-    }
-}
 
 /// <summary>Forwards mouse input to mouse output.</summary>
 public static class MouseForwardingExtensions

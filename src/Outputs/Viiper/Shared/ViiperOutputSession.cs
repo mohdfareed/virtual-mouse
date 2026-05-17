@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using global::Viiper.Client;
@@ -61,6 +62,26 @@ internal sealed class ViiperOutputSession : IDisposable, IAsyncDisposable
             : device;
     }
 
+    public IDisposable ListenOutput(Func<Stream, Task> handler, string message)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+
+        ViiperDevice device = GetDeviceOrThrow(message);
+        if (device.OnOutput is not null)
+        {
+            throw new InvalidOperationException("VIIPER output feedback is already being handled.");
+        }
+
+        device.OnOutput = handler;
+        return new OutputSubscription(() =>
+        {
+            if (ReferenceEquals(device.OnOutput, handler))
+            {
+                device.OnOutput = null;
+            }
+        });
+    }
+
     public void Dispose()
     {
         DisposeAsync().AsTask().GetAwaiter().GetResult();
@@ -107,5 +128,15 @@ internal sealed class ViiperOutputSession : IDisposable, IAsyncDisposable
 
             onDisconnect?.Invoke();
         };
+    }
+
+    private sealed class OutputSubscription(Action dispose) : IDisposable
+    {
+        private Action? _dispose = dispose;
+
+        public void Dispose()
+        {
+            Interlocked.Exchange(ref _dispose, null)?.Invoke();
+        }
     }
 }

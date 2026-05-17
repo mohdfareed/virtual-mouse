@@ -1,5 +1,6 @@
 using System;
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using Hosting;
 using Inputs.Sdl;
 
@@ -19,14 +20,41 @@ internal static class CliOptions
             $"Button press duration. Default: {defaultDurationMs}.");
     }
 
+    internal static Option<int?> CreateWaitMsOption(int defaultWaitMs)
+    {
+        return CreateNonNegativeIntOption(
+            "--wait-ms",
+            $"Wait for matching devices before failing. Default: {defaultWaitMs}.");
+    }
+
+    internal static Option<bool> CreatePauseOption()
+    {
+        return new Option<bool>("--pause")
+        {
+            Description = "Wait for Enter before exiting.",
+        };
+    }
+
     internal static Option<int?> CreateDeviceIndexOption(string name, string description)
     {
         return CreateNonNegativeIntOption(name, description);
     }
 
-    internal static Option<int?> CreatePollMsOption(string name, string description)
+    internal static Option<SdlGamepadInputMode?> CreateSdlGamepadModeOption(string name, string description)
     {
-        return CreateNonNegativeIntOption(name, description);
+        return new Option<SdlGamepadInputMode?>(name)
+        {
+            Description = description,
+            CustomParser = result => ParseSdlGamepadInputMode(result, name),
+        };
+    }
+
+    internal static Option<bool> CreateSdlPhysicalMotionOption(string name, string description)
+    {
+        return new Option<bool>(name)
+        {
+            Description = description,
+        };
     }
 
     internal static Option<ForwardingRouteKind?> CreateRouteOption()
@@ -81,12 +109,21 @@ internal static class CliOptions
     internal static SdlGamepadOptions CreateSdlGamepadOptions(
         ParseResult parseResult,
         Option<int?> deviceIndexOption,
-        Option<int?> pollMsOption)
+        Option<SdlGamepadInputMode?>? modeOption = null,
+        Option<bool>? physicalMotionOption = null,
+        Option<int?>? motionDeviceIndexOption = null,
+        SdlGamepadInputMode defaultMode = SdlGamepadInputMode.Physical)
     {
         return new SdlGamepadOptions
         {
             DeviceIndex = parseResult.GetValue(deviceIndexOption) ?? 0,
-            PollInterval = TimeSpan.FromMilliseconds(parseResult.GetValue(pollMsOption) ?? 1),
+            Mode = modeOption is null
+                ? defaultMode
+                : parseResult.GetValue(modeOption) ?? defaultMode,
+            UsePhysicalMotion = physicalMotionOption is not null && parseResult.GetValue(physicalMotionOption),
+            MotionDeviceIndex = motionDeviceIndexOption is null
+                ? null
+                : parseResult.GetValue(motionDeviceIndexOption),
         };
     }
 
@@ -105,6 +142,30 @@ internal static class CliOptions
             }
         });
         return option;
+    }
+
+    private static SdlGamepadInputMode? ParseSdlGamepadInputMode(ArgumentResult result, string optionName)
+    {
+        if (result.Tokens.Count == 0)
+        {
+            return null;
+        }
+
+        string value = result.Tokens[0].Value;
+        string normalized = value.Replace("-", string.Empty, StringComparison.Ordinal).ToUpperInvariant();
+        return normalized switch
+        {
+            "PHYSICAL" => SdlGamepadInputMode.Physical,
+            "STEAM" => SdlGamepadInputMode.Steam,
+            _ => AddSdlGamepadModeError(result, optionName),
+        };
+    }
+
+    private static SdlGamepadInputMode? AddSdlGamepadModeError(ArgumentResult result, string optionName)
+    {
+        result.AddError(
+            $"{optionName} must be one of: physical, steam.");
+        return null;
     }
 
     private static Option<int?> CreateNonNegativeIntOption(string name, string description)

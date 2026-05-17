@@ -119,6 +119,10 @@ public sealed class ForwardingHostTests
         Assert.AreEqual("xpad", status.Xpad.RouteId);
         Assert.AreEqual(0, status.Xpad.EnabledClientCount);
         Assert.IsFalse(status.Xpad.IsConnected);
+        Assert.AreEqual(Inputs.Sdl.SdlGamepadInputMode.Physical, status.XpadMode);
+        Assert.IsFalse(status.XpadUsesPhysicalMotion);
+        Assert.IsTrue(status.EmulationEnabled);
+        Assert.IsTrue(status.PhysicalMotionEnabled);
     }
 
     /// <summary>Checks lease-counted enable state.</summary>
@@ -182,6 +186,30 @@ public sealed class ForwardingHostTests
         ForwardingHostStatus reused = await session.GetStatusAsync().ConfigureAwait(false);
         Assert.AreEqual(1, reused.Xpad.EnabledClientCount);
         Assert.IsTrue(reused.Xpad.IsConnected);
+    }
+
+    /// <summary>Checks global host state can change without route lease ownership.</summary>
+    [TestMethod]
+    public async Task ControlSessionUpdatesGlobalState()
+    {
+        await using ForwardingHostRuntime runtime = CreateRuntime();
+        using ForwardingHostControlSession session = new(runtime, requestStop: null, logger: null);
+
+        await session.SetEmulationEnabledAsync(false).ConfigureAwait(false);
+        await session.SetPhysicalMotionEnabledAsync(false).ConfigureAwait(false);
+
+        ForwardingHostStatus disabled = await session.GetStatusAsync().ConfigureAwait(false);
+        Assert.IsFalse(disabled.EmulationEnabled);
+        Assert.IsFalse(disabled.PhysicalMotionEnabled);
+
+        bool emulationToggled = await session.ToggleEmulationEnabledAsync().ConfigureAwait(false);
+        bool physicalMotionToggled = await session.TogglePhysicalMotionEnabledAsync().ConfigureAwait(false);
+
+        ForwardingHostStatus enabled = await session.GetStatusAsync().ConfigureAwait(false);
+        Assert.IsTrue(emulationToggled);
+        Assert.IsTrue(physicalMotionToggled);
+        Assert.IsTrue(enabled.EmulationEnabled);
+        Assert.IsTrue(enabled.PhysicalMotionEnabled);
     }
 
     /// <summary>Checks control session stop callback.</summary>
@@ -299,19 +327,32 @@ public sealed class ForwardingHostTests
 
     private static ForwardingHostRuntime CreateRuntime()
     {
+        ForwardingHostState hostState = new();
         HostedRouteController mouse = new(
             ForwardingRouteIds.Mouse,
             _ => Task.FromResult<IForwardingRoute>(new MouseForwardingRoute(
                 new TestMouseInputSource(),
                 new TestMouseOutput())),
-            logger: null);
+            logger: null,
+            () => hostState.EmulationEnabled);
         HostedRouteController xpad = new(
             ForwardingRouteIds.Xpad,
             _ => Task.FromResult<IForwardingRoute>(new Xbox360ForwardingRoute(
                 new TestGamepadInputSource(new GamepadState(GamepadButtons.South, 0, 0, 0, 0, 0, 0, default)),
-                new TestXbox360Output())),
-            logger: null);
-        return new ForwardingHostRuntime(mouse, xpad, 0, "gamepad");
+                new TestXbox360Output(),
+                shouldForwardMotion: () => hostState.PhysicalMotionEnabled)),
+            logger: null,
+            () => hostState.EmulationEnabled);
+        return new ForwardingHostRuntime(
+            mouse,
+            xpad,
+            0,
+            Inputs.Sdl.SdlGamepadInputMode.Physical,
+            false,
+            hostState,
+            "gamepad",
+            null,
+            null);
     }
 
     private static ForwardingHost CreateHost()

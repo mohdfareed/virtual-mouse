@@ -14,31 +14,88 @@ internal static class ForwardingHostRuntimeFactory
     public static ForwardingHostRuntime Create(ForwardingServerOptions options)
     {
 #pragma warning disable CA2000
-        string? xpadDeviceName = ValidateSdlOptions(options.SdlGamepad);
+        SdlDeviceSelection xpadDeviceSelection = ValidateSdlOptions(options.SdlGamepad);
+        ForwardingHostState hostState = new();
         HostedRouteController mouse = new(
             ForwardingRouteIds.Mouse,
             ct => CreateMouseRouteAsync(options.Viiper, ct),
-            options.Logger);
+            options.Logger,
+            () => hostState.EmulationEnabled);
         HostedRouteController xpad = new(
             ForwardingRouteIds.Xpad,
-            ct => CreateXpadRouteAsync(options.Viiper, options.SdlGamepad, ct),
-            options.Logger);
+            ct => CreateXpadRouteAsync(options.Viiper, options.SdlGamepad, hostState, ct),
+            options.Logger,
+            () => hostState.EmulationEnabled);
 
         return new ForwardingHostRuntime(
             mouse,
             xpad,
             options.SdlGamepad.DeviceIndex,
-            xpadDeviceName);
+            options.SdlGamepad.Mode,
+            options.SdlGamepad.UsePhysicalMotion,
+            hostState,
+            xpadDeviceSelection.DeviceName,
+            xpadDeviceSelection.MotionDeviceIndex,
+            xpadDeviceSelection.MotionDeviceName);
 #pragma warning restore CA2000
     }
 
-    private static string? ValidateSdlOptions(SdlGamepadOptions options)
+    private static SdlDeviceSelection ValidateSdlOptions(SdlGamepadOptions options)
     {
+        if (options.UsePhysicalMotion && options.Mode != SdlGamepadInputMode.Steam)
+        {
+            throw new InvalidOperationException("SDL physical motion requires xpad mode steam.");
+        }
+
         IReadOnlyList<SdlGamepadInfo> gamepads = SdlGamepadSource.GetGamepads();
         int deviceIndex = options.DeviceIndex;
-        return deviceIndex < 0 || deviceIndex >= gamepads.Count
-            ? throw new InvalidOperationException($"SDL gamepad index {deviceIndex} is not available.")
-            : gamepads[deviceIndex].Name;
+        if (deviceIndex < 0 || deviceIndex >= gamepads.Count)
+        {
+            throw new InvalidOperationException($"SDL gamepad index {deviceIndex} is not available.");
+        }
+
+        SdlGamepadInfo gamepad = gamepads[deviceIndex];
+        ValidateSdlMode(gamepad, options.Mode);
+
+        if (!options.UsePhysicalMotion)
+        {
+            return new SdlDeviceSelection(gamepad.Name, null, null);
+        }
+
+        int motionDeviceIndex = SdlGamepadSource.ResolveMotionDeviceIndex(gamepads, gamepad, options);
+        if (motionDeviceIndex < 0 || motionDeviceIndex >= gamepads.Count)
+        {
+            throw new InvalidOperationException($"SDL motion gamepad index {motionDeviceIndex} is not available.");
+        }
+
+        SdlGamepadInfo motionGamepad = gamepads[motionDeviceIndex];
+        ValidatePhysicalSdlGamepad(motionGamepad);
+        return new SdlDeviceSelection(gamepad.Name, motionDeviceIndex, motionGamepad.Name);
+    }
+
+    private static void ValidateSdlMode(SdlGamepadInfo gamepad, SdlGamepadInputMode mode)
+    {
+        bool expectsSteamInput = mode switch
+        {
+            SdlGamepadInputMode.Physical => false,
+            SdlGamepadInputMode.Steam => true,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+        };
+
+        if (gamepad.IsSteamInput != expectsSteamInput)
+        {
+            throw new InvalidOperationException(
+                $"SDL gamepad index {gamepad.Index} does not match xpad mode {mode}.");
+        }
+    }
+
+    private static void ValidatePhysicalSdlGamepad(SdlGamepadInfo gamepad)
+    {
+        if (gamepad.IsSteamInput)
+        {
+            throw new InvalidOperationException(
+                $"SDL motion gamepad index {gamepad.Index} is not a physical SDL gamepad.");
+        }
     }
 
     private static Task<IForwardingRoute> CreateMouseRouteAsync(
@@ -86,6 +143,7 @@ internal static class ForwardingHostRuntimeFactory
     private static async Task<IForwardingRoute> CreateXpadRouteAsync(
         ViiperOptions viiperOptions,
         SdlGamepadOptions sdlOptions,
+        ForwardingHostState hostState,
         CancellationToken cancellationToken)
     {
         SdlGamepadSource? input = null;
@@ -97,7 +155,10 @@ internal static class ForwardingHostRuntimeFactory
             await ViiperServer.EnsureRunningAsync(viiperOptions, cancellationToken).ConfigureAwait(false);
             output = await ViiperXbox360Output.ConnectAsync(viiperOptions, cancellationToken).ConfigureAwait(false);
 
-            Xbox360ForwardingRoute route = new(input, output);
+            Xbox360ForwardingRoute route = new(
+                input,
+                output,
+                shouldForwardMotion: () => hostState.PhysicalMotionEnabled);
             input = null;
             output = null;
             return route;
@@ -115,4 +176,9 @@ internal static class ForwardingHostRuntimeFactory
             }
         }
     }
+
+    private readonly record struct SdlDeviceSelection(
+        string? DeviceName,
+        int? MotionDeviceIndex,
+        string? MotionDeviceName);
 }

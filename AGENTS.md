@@ -68,6 +68,8 @@ Do not set `LangVersion=latest`.
 - Keep mouse source-to-output forwarding on the shared `IMouseInputSource`/`IMouseOutput` path in `src/Hosting`; transports should provide source-name filtering through `IMouseOutput.FilterInput`.
 - For future controller and keyboard paths, keep source and output contracts explicit instead of forcing mouse, keyboard, and gamepad state through one generic interface.
 - Use SDL as the controller input source and map its standard gamepad state through hosting routes before sending to a concrete output such as Xbox 360 or DS4.
+- Treat physical SDL gamepad input and Steam-routed SDL gamepad input as separate source modes. Physical motion is a separate Steam-mode option, not a third source mode. Mixed sources may combine Steam-routed buttons/axes with physical controller motion sensors such as gyro.
+- SDL gamepad input should be event-driven through SDL events such as gamepad update-complete and sensor-update events, not an input polling loop.
 - Do not add a shared factory or transport manager unless explicitly requested.
 - Do not add a shared cross-transport options type.
 - `IMouseOutput` represents a usable mouse session, not a transport factory.
@@ -79,6 +81,7 @@ Do not set `LangVersion=latest`.
 - Prefer one local host process for production forwarding. The host owns Raw Input and the physical output transport; other processes should use control IPC instead of running their own forwarding loops.
 - Keep host IPC control-only. Do not forward per-report mouse traffic over IPC unless explicitly revisited.
 - Client control sessions may enable and disable route leases without disconnecting. Disconnecting a client must release any route leases it still holds.
+- Host-owned global forwarding state, such as emulation enabled and physical motion enabled, may be mutated by short-lived clients without taking a forwarding lease.
 - Expose Hosting through normal app-facing `ForwardingServer` and `ForwardingClient` APIs. Keep named-pipe control details behind those types.
 - `ForwardingServer` should remain usable as a Microsoft `IHostedService` so CLI, tray, and WPF app hosts can compose it through Generic Host patterns.
 - Host routes are explicit peers. Do not describe mouse route names as defaults when they are really route-specific names.
@@ -108,6 +111,8 @@ Do not set `LangVersion=latest`.
 - Treat VIIPER as a direct handoff target.
 - Map `MouseReport` directly to VIIPER mouse input.
 - Map `Xbox360Report` directly to VIIPER Xbox 360 input.
+- Route Xbox rumble feedback from the virtual output back to the SDL gamepad source when both sides support it.
+- Treat Xbox rumble feedback as a held state, not a timed effect. SDL requires a duration, so the SDL adapter may use an effectively-held duration internally but must stop rumble explicitly on zero state and disposal.
 - For virtual controller outputs, use the real controller USB identity expected by games and drivers. Xbox 360 output uses Microsoft `045E:028E`; DS4 should use Sony `054C:05C4` for the original DS4 unless a newer CUH-ZCT2 profile specifically needs `054C:09CC`.
 - Fail on unsupported ranges rather than clamping silently.
 - Keep implementation thin and explicit.
@@ -144,9 +149,10 @@ Do not set `LangVersion=latest`.
 - Keep the CLI project at `cli/Cli.csproj`; do not put it under `tools`.
 - Keep the CLI split into `host` for host lifecycle, `client` for normal host control, `steam` for Steam product features, and `test` for diagnostics and manual tools.
 - Keep daily forwarding under `client run [--route <route>]`, not under top-level device command groups.
+- Keep global host-state controls under direct client command groups, for example `client emulation enable|disable|toggle` and `client physical-motion enable|disable|toggle`.
 - Keep one host process that owns all supported routes. Host startup config chooses route-specific setup such as the SDL gamepad device index, while each route connects lazily only when at least one client enables it.
 - Keep diagnostics such as probes, raw input viewers, nullifiers, synthetic button presses, and benchmark commands under `test`, not under product-facing command groups.
-- Do not add legacy or compatibility CLI aliases before the project has had a release. Keep only the current intended command shape.
+- Do not add alternate CLI aliases before the project has had a release. Keep only the current intended command shape.
 - Keep Steam Input controls under `steam` commands such as `list`, `force`, `clear`, and `open-config`; do not reuse `steam` as a mouse-forwarding command.
 - CLI output should be concise, aligned, and value-first; avoid prose verdicts and unexplained benchmark jargon.
 - Keep benchmark entrypoints under `test mouse bench <output>` and `test xpad bench <output>`. They may print multiple measured repository boundaries for that pair, but do not reintroduce separate raw/bridge/all or xpad bench command trees.

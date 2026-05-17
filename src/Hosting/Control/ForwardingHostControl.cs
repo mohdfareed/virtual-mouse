@@ -106,6 +106,14 @@ internal partial interface IForwardingHostControl
 
     Task DisableAsync(ForwardingRouteKind route);
 
+    Task SetEmulationEnabledAsync(bool enabled);
+
+    Task<bool> ToggleEmulationEnabledAsync();
+
+    Task SetPhysicalMotionEnabledAsync(bool enabled);
+
+    Task<bool> TogglePhysicalMotionEnabledAsync();
+
     Task StopAsync();
 }
 
@@ -140,6 +148,30 @@ internal sealed class ForwardingHostControlSession(
         ForwardingHostControlLog.ReceivedCommand(logger, nameof(DisableAsync));
         ReleaseLease(route);
         return Task.CompletedTask;
+    }
+
+    public Task SetEmulationEnabledAsync(bool enabled)
+    {
+        ForwardingHostControlLog.ReceivedCommand(logger, nameof(SetEmulationEnabledAsync));
+        return runtime.SetEmulationEnabledAsync(enabled);
+    }
+
+    public Task<bool> ToggleEmulationEnabledAsync()
+    {
+        ForwardingHostControlLog.ReceivedCommand(logger, nameof(ToggleEmulationEnabledAsync));
+        return runtime.ToggleEmulationEnabledAsync();
+    }
+
+    public Task SetPhysicalMotionEnabledAsync(bool enabled)
+    {
+        ForwardingHostControlLog.ReceivedCommand(logger, nameof(SetPhysicalMotionEnabledAsync));
+        return runtime.SetPhysicalMotionEnabledAsync(enabled);
+    }
+
+    public Task<bool> TogglePhysicalMotionEnabledAsync()
+    {
+        ForwardingHostControlLog.ReceivedCommand(logger, nameof(TogglePhysicalMotionEnabledAsync));
+        return runtime.TogglePhysicalMotionEnabledAsync();
     }
 
     public Task StopAsync()

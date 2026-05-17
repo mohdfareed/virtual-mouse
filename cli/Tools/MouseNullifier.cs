@@ -11,7 +11,7 @@ namespace Cli.Tools;
 internal static class MouseNullifier
 {
     [SupportedOSPlatform("windows")]
-    public static async Task RunRawInputToAsync(
+    internal static async Task RunRawInputToAsync(
         IMouseOutput output,
         CancellationToken cancellationToken = default)
     {

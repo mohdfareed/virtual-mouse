@@ -8,7 +8,7 @@ namespace Cli.Tools.Benchmarks;
 internal static partial class ForwardingBenchmarks
 {
     /// <summary>Measures mouse source callback to VIIPER mouse API input mapping.</summary>
-    public static ForwardingBenchmarkMeasurement BenchmarkSourceToViiperApi(
+    internal static ForwardingBenchmarkMeasurement BenchmarkSourceToViiperApi(
         MouseReport report,
         int count,
         CancellationToken cancellationToken = default)
@@ -35,7 +35,7 @@ internal static partial class ForwardingBenchmarks
     }
 
     /// <summary>Measures gamepad source callback to VIIPER Xbox 360 API input mapping.</summary>
-    public static ForwardingBenchmarkMeasurement BenchmarkGamepadToViiperApi(
+    internal static ForwardingBenchmarkMeasurement BenchmarkGamepadToViiperApi(
         GamepadState state,
         int count,
         CancellationToken cancellationToken = default)

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Inputs.Sdl;
 using Microsoft.Extensions.Logging;
 
 namespace Hosting;
@@ -9,7 +10,8 @@ namespace Hosting;
 internal sealed class HostedRouteController(
     string routeId,
     Func<CancellationToken, Task<IForwardingRoute>> createRouteAsync,
-    ILogger? logger) : IAsyncDisposable
+    ILogger? logger,
+    Func<bool>? shouldForward = null) : IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private HostedRouteInstance? _instance;
@@ -21,7 +23,11 @@ internal sealed class HostedRouteController(
 
         try
         {
-            _instance ??= await HostedRouteInstance.StartAsync(createRouteAsync, logger, cancellationToken)
+            _instance ??= await HostedRouteInstance.StartAsync(
+                    createRouteAsync,
+                    logger,
+                    shouldForward,
+                    cancellationToken)
                 .ConfigureAwait(false);
 
             _enabledClientCount++;
@@ -132,11 +138,12 @@ internal sealed class HostedRouteController(
         public static async Task<HostedRouteInstance> StartAsync(
             Func<CancellationToken, Task<IForwardingRoute>> createRouteAsync,
             ILogger? logger,
+            Func<bool>? shouldForward,
             CancellationToken cancellationToken)
         {
 #pragma warning disable CA2000
             IForwardingRoute route = await createRouteAsync(cancellationToken).ConfigureAwait(false);
-            ForwardingHost host = new(route, logger);
+            ForwardingHost host = new(route, logger, shouldForward);
 
             try
             {
@@ -205,7 +212,12 @@ internal sealed class ForwardingHostRuntime(
     HostedRouteController mouse,
     HostedRouteController xpad,
     int xpadDeviceIndex,
-    string? xpadDeviceName) : IAsyncDisposable
+    SdlGamepadInputMode xpadMode,
+    bool xpadUsesPhysicalMotion,
+    ForwardingHostState hostState,
+    string? xpadDeviceName,
+    int? xpadMotionDeviceIndex,
+    string? xpadMotionDeviceName) : IAsyncDisposable
 {
     public Task<ForwardingHostStatus> GetStatusAsync()
     {
@@ -224,6 +236,28 @@ internal sealed class ForwardingHostRuntime(
 #pragma warning restore CA2000
     }
 
+    public Task SetEmulationEnabledAsync(bool enabled)
+    {
+        hostState.SetEmulationEnabled(enabled);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> ToggleEmulationEnabledAsync()
+    {
+        return Task.FromResult(hostState.ToggleEmulationEnabled());
+    }
+
+    public Task SetPhysicalMotionEnabledAsync(bool enabled)
+    {
+        hostState.SetPhysicalMotionEnabled(enabled);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> TogglePhysicalMotionEnabledAsync()
+    {
+        return Task.FromResult(hostState.TogglePhysicalMotionEnabled());
+    }
+
     public async ValueTask DisposeAsync()
     {
         await mouse.DisposeAsync().ConfigureAwait(false);
@@ -239,6 +273,12 @@ internal sealed class ForwardingHostRuntime(
             mouseStatus,
             xpadStatus,
             xpadDeviceIndex,
-            xpadDeviceName);
+            xpadMode,
+            xpadUsesPhysicalMotion,
+            hostState.EmulationEnabled,
+            hostState.PhysicalMotionEnabled,
+            xpadDeviceName,
+            xpadMotionDeviceIndex,
+            xpadMotionDeviceName);
     }
 }

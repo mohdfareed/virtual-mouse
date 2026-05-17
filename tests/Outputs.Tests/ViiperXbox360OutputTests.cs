@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Outputs.Viiper;
 using ViiperDeviceInfo = global::Viiper.Client.Types.Device;
 using ViiperXbox360Input = global::Viiper.Client.Devices.Xbox360.Xbox360Input;
+using ViiperXbox360OutputReport = global::Viiper.Client.Devices.Xbox360.Xbox360Output;
 
 namespace Outputs.Tests;
 
@@ -32,6 +33,22 @@ public sealed class ViiperXbox360OutputTests
         Assert.AreEqual((short)-456, input.Ly);
         Assert.AreEqual((short)789, input.Rx);
         Assert.AreEqual((short)-987, input.Ry);
+    }
+
+    /// <summary>Checks rumble feedback mapping.</summary>
+    [TestMethod]
+    public void MapRumblePreservesMotors()
+    {
+        ViiperXbox360OutputReport output = new()
+        {
+            Left = 12,
+            Right = 34,
+        };
+
+        Xbox360Rumble rumble = ViiperXbox360Output.MapRumble(output);
+
+        Assert.AreEqual((byte)12, rumble.LeftMotor);
+        Assert.AreEqual((byte)34, rumble.RightMotor);
     }
 
     /// <summary>Checks constructor argument validation.</summary>

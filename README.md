@@ -1,4 +1,4 @@
-# Virtual Mouse
+# Local Input Forwarding
 
 Project for local input forwarding transports.
 
@@ -29,25 +29,29 @@ Project for local input forwarding transports.
 
 ## CLI
 
-- `.\scripts\cli host run --route mouse`: run the mouse forwarding host
-- `.\scripts\cli host run --route xpad`: run the xpad forwarding host
-- `.\scripts\cli host enable --route <mouse|xpad>`: enable a running host route
-- `.\scripts\cli host status --route <mouse|xpad>`: print host route status
-- `.\scripts\cli mouse run`: start Raw Input mouse forwarding
-- `.\scripts\cli xpad run`: enable a running xpad host route
-- `.\scripts\cli xpad probe`: list SDL gamepads
-- `.\scripts\cli xpad input`: print SDL gamepad state changes
-- `.\scripts\cli xpad test`: send a short VIIPER Xbox 360 test report
+- `.\scripts\cli host run`: run the local forwarding host
+- `.\scripts\cli host status`: print host and route status
+- `.\scripts\cli host stop`: request the running host to stop
+- `.\scripts\cli client run --route <mouse|xpad>`: enable a route for the client lifetime
+- `.\scripts\cli client emulation <enable|disable|toggle>`: control the global emulation gate
+- `.\scripts\cli client physical-motion <enable|disable|toggle>`: control the global physical motion gate
+- `.\scripts\cli test mouse input`: print Raw Input mouse reports
+- `.\scripts\cli test mouse nullify`: forward inverted Raw Input mouse reports for testing
+- `.\scripts\cli test mouse bench viiper`: benchmark Raw Input to VIIPER boundaries
+- `.\scripts\cli test xpad probe`: list SDL gamepads
+- `.\scripts\cli test xpad input`: print SDL gamepad state changes
+- `.\scripts\cli test xpad press`: send a short VIIPER Xbox 360 test report
+- `.\scripts\cli test xpad bench viiper`: benchmark SDL to VIIPER boundaries
 - `.\scripts\cli steam list`: list Steam and non-Steam games
 - `.\scripts\cli steam force <app-id>`: force a Steam Input config
 - `.\scripts\cli steam clear`: clear Steam Input config forcing
-- `.\scripts\cli bench <raw|sdl> <viiper|teensy>`: benchmark input to output boundaries
 
 ## TODO
 
-- [ ] Rumble and force feedback routing.
 - [ ] DS4 output contract and DS4-specific mapping.
-- [ ] SDL gyro, accelerometer, touchpad, and other controller capability models.
+- [ ] SDL-VIIPER touchpad, and other controller capability models.
+  - [ ] rumble, trigger rumble, light-bar RGB, flash timing
+  - [ ] buttons, sticks, triggers, gyro, accel, touchpad
 - [ ] Teensy output architecture and firmware.
 - [ ] Packaging/runtime distribution for SDL3 and VIIPER dependencies.
 - [ ] Host protocol versioning, machine-readable diagnostics, and richer

@@ -15,6 +15,15 @@ public interface IGamepadInputSource : IAsyncDisposable
     void Run(GamepadInputHandler handler, CancellationToken cancellationToken = default);
 }
 
+/// <summary>Sends rumble feedback to a gamepad.</summary>
+public interface IGamepadRumbleSink
+{
+    /// <summary>Attempts to set gamepad rumble.</summary>
+    /// <param name="rumble">Rumble state.</param>
+    /// <returns><see langword="true" /> when the source accepted the rumble state.</returns>
+    bool TryRumble(GamepadRumble rumble);
+}
+
 /// <summary>Handles one gamepad input update.</summary>
 /// <param name="input">Gamepad input.</param>
 public delegate void GamepadInputHandler(in GamepadInput input);
@@ -23,6 +32,18 @@ public delegate void GamepadInputHandler(in GamepadInput input);
 /// <param name="State">Gamepad state.</param>
 /// <param name="DeviceName">Source device name, when known.</param>
 public readonly record struct GamepadInput(GamepadState State, string DeviceName);
+
+/// <summary>Gamepad rumble state.</summary>
+/// <param name="LowFrequency">Low-frequency motor intensity.</param>
+/// <param name="HighFrequency">High-frequency motor intensity.</param>
+public readonly record struct GamepadRumble(ushort LowFrequency, ushort HighFrequency)
+{
+    /// <summary>No rumble.</summary>
+    public static GamepadRumble Empty => default;
+
+    /// <summary>Gets whether both rumble motors are stopped.</summary>
+    public bool IsEmpty => LowFrequency == 0 && HighFrequency == 0;
+}
 
 /// <summary>Standard gamepad button flags.</summary>
 [Flags]

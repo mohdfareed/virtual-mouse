@@ -16,6 +16,19 @@ public interface IXbox360Output : IAsyncDisposable
     ValueTask SendAsync(Xbox360Report report, CancellationToken cancellationToken = default);
 }
 
+/// <summary>Receives Xbox 360 output feedback.</summary>
+public interface IXbox360FeedbackSource
+{
+    /// <summary>Registers for rumble feedback.</summary>
+    /// <param name="handler">Called for each rumble update.</param>
+    /// <returns>Subscription that stops feedback delivery when disposed.</returns>
+    IDisposable ListenRumble(Xbox360RumbleHandler handler);
+}
+
+/// <summary>Handles one Xbox 360 rumble feedback update.</summary>
+/// <param name="rumble">Rumble feedback.</param>
+public delegate ValueTask Xbox360RumbleHandler(Xbox360Rumble rumble);
+
 /// <summary>Xbox 360 button flags.</summary>
 [Flags]
 public enum Xbox360Buttons
@@ -84,3 +97,8 @@ public readonly record struct Xbox360Report(
         RightX == 0 &&
         RightY == 0;
 }
+
+/// <summary>Xbox 360 rumble feedback.</summary>
+/// <param name="LeftMotor">Left motor intensity.</param>
+/// <param name="RightMotor">Right motor intensity.</param>
+public readonly record struct Xbox360Rumble(byte LeftMotor, byte RightMotor);

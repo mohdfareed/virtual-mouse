@@ -11,15 +11,15 @@ namespace Cli.Tools.Benchmarks;
 internal static partial class ForwardingBenchmarks
 {
     /// <summary>Default measured report count.</summary>
-    public const int DefaultCount = 1_000;
+    internal const int DefaultCount = 1_000;
 
     /// <summary>Default warmup report count.</summary>
-    public const int WarmupCount = 1_000;
+    internal const int WarmupCount = 1_000;
 
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromSeconds(1);
 
     /// <summary>Runs the requested benchmark pair.</summary>
-    public static async Task<IReadOnlyList<ForwardingBenchmarkResult>> RunAsync(
+    internal static async Task<IReadOnlyList<ForwardingBenchmarkResult>> RunAsync(
         ForwardingBenchmarkInput input,
         ForwardingBenchmarkOutput output,
         int count,
@@ -80,7 +80,10 @@ internal static partial class ForwardingBenchmarks
     {
         ForwardingBenchmarkMeasurement inputMeasurement = await BenchmarkSdlInputAsync(
             count,
-            new SdlGamepadOptions(),
+            new SdlGamepadOptions
+            {
+                Mode = SdlGamepadInputMode.Physical,
+            },
             progress,
             cancellationToken).ConfigureAwait(false);
         GamepadState state = new(

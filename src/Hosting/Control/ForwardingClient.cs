@@ -100,6 +100,54 @@ public sealed class ForwardingClient
         await proxy.StopAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Sets whether emulation reports are forwarded.</summary>
+    public async Task SetEmulationEnabledAsync(
+        bool enabled,
+        CancellationToken cancellationToken = default)
+    {
+        using NamedPipeClientStream pipe = CreatePipe();
+
+        await ConnectAsync(pipe, cancellationToken).ConfigureAwait(false);
+        IForwardingHostControl proxy = JsonRpc.Attach<IForwardingHostControl>(pipe);
+        using IDisposable proxyHandle = (IDisposable)proxy;
+        await proxy.SetEmulationEnabledAsync(enabled).WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Toggles whether emulation reports are forwarded.</summary>
+    public async Task<bool> ToggleEmulationEnabledAsync(CancellationToken cancellationToken = default)
+    {
+        using NamedPipeClientStream pipe = CreatePipe();
+
+        await ConnectAsync(pipe, cancellationToken).ConfigureAwait(false);
+        IForwardingHostControl proxy = JsonRpc.Attach<IForwardingHostControl>(pipe);
+        using IDisposable proxyHandle = (IDisposable)proxy;
+        return await proxy.ToggleEmulationEnabledAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Sets whether physical motion data is forwarded.</summary>
+    public async Task SetPhysicalMotionEnabledAsync(
+        bool enabled,
+        CancellationToken cancellationToken = default)
+    {
+        using NamedPipeClientStream pipe = CreatePipe();
+
+        await ConnectAsync(pipe, cancellationToken).ConfigureAwait(false);
+        IForwardingHostControl proxy = JsonRpc.Attach<IForwardingHostControl>(pipe);
+        using IDisposable proxyHandle = (IDisposable)proxy;
+        await proxy.SetPhysicalMotionEnabledAsync(enabled).WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Toggles whether physical motion data is forwarded.</summary>
+    public async Task<bool> TogglePhysicalMotionEnabledAsync(CancellationToken cancellationToken = default)
+    {
+        using NamedPipeClientStream pipe = CreatePipe();
+
+        await ConnectAsync(pipe, cancellationToken).ConfigureAwait(false);
+        IForwardingHostControl proxy = JsonRpc.Attach<IForwardingHostControl>(pipe);
+        using IDisposable proxyHandle = (IDisposable)proxy;
+        return await proxy.TogglePhysicalMotionEnabledAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private NamedPipeClientStream CreatePipe()
     {
         return new NamedPipeClientStream(
@@ -151,6 +199,34 @@ public sealed class ForwardingClientSession : IAsyncDisposable, IDisposable
     {
         IForwardingHostControl proxy = GetProxy();
         return proxy.DisableAsync(route).WaitAsync(cancellationToken);
+    }
+
+    /// <summary>Sets whether emulation reports are forwarded without disconnecting this session.</summary>
+    public Task SetEmulationEnabledAsync(bool enabled, CancellationToken cancellationToken = default)
+    {
+        IForwardingHostControl proxy = GetProxy();
+        return proxy.SetEmulationEnabledAsync(enabled).WaitAsync(cancellationToken);
+    }
+
+    /// <summary>Toggles whether emulation reports are forwarded without disconnecting this session.</summary>
+    public Task<bool> ToggleEmulationEnabledAsync(CancellationToken cancellationToken = default)
+    {
+        IForwardingHostControl proxy = GetProxy();
+        return proxy.ToggleEmulationEnabledAsync().WaitAsync(cancellationToken);
+    }
+
+    /// <summary>Sets whether physical motion data is forwarded without disconnecting this session.</summary>
+    public Task SetPhysicalMotionEnabledAsync(bool enabled, CancellationToken cancellationToken = default)
+    {
+        IForwardingHostControl proxy = GetProxy();
+        return proxy.SetPhysicalMotionEnabledAsync(enabled).WaitAsync(cancellationToken);
+    }
+
+    /// <summary>Toggles whether physical motion data is forwarded without disconnecting this session.</summary>
+    public Task<bool> TogglePhysicalMotionEnabledAsync(CancellationToken cancellationToken = default)
+    {
+        IForwardingHostControl proxy = GetProxy();
+        return proxy.TogglePhysicalMotionEnabledAsync().WaitAsync(cancellationToken);
     }
 
     /// <inheritdoc />
