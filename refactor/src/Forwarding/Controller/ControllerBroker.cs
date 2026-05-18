@@ -225,11 +225,10 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
 
     private void RefreshOutput(ControllerSlot slot, List<IControllerOutput>? dispose = null)
     {
-        ControllerOutput outputKind = GetActiveOutputKind();
+        ControllerOutput outputKind = GetOutputKind(slot);
         bool shouldConnect =
             _controllerOutputEnabled &&
-            outputKind != ControllerOutput.None &&
-            slot.HasSteam(_activeClientId);
+            outputKind != ControllerOutput.None;
 
         if (!shouldConnect)
         {
@@ -240,12 +239,26 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
         slot.ConnectOutput(outputFactory, outputKind);
     }
 
-    private ControllerOutput GetActiveOutputKind()
+    private ControllerOutput GetOutputKind(ControllerSlot slot)
     {
-        return _activeClientId.HasValue &&
-            _clients.TryGetValue(_activeClientId.Value, out ClientEntry? client)
-            ? client.ControllerOutput
-            : ControllerOutput.None;
+        if (_activeClientId.HasValue &&
+            slot.HasSteam(_activeClientId) &&
+            _clients.TryGetValue(_activeClientId.Value, out ClientEntry? activeClient) &&
+            activeClient.ControllerOutput != ControllerOutput.None)
+        {
+            return activeClient.ControllerOutput;
+        }
+
+        foreach (Guid clientId in slot.Steam.Keys)
+        {
+            if (_clients.TryGetValue(clientId, out ClientEntry? client) &&
+                client.ControllerOutput != ControllerOutput.None)
+            {
+                return client.ControllerOutput;
+            }
+        }
+
+        return ControllerOutput.None;
     }
 
     private void SendMergedIfActive(ControllerSlot slot)

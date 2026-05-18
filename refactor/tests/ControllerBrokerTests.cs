@@ -88,9 +88,9 @@ public sealed class ControllerBrokerTests
         Assert.AreEqual(1, factory.SingleOutput.LastState.Motion?.GyroX);
     }
 
-    /// <summary>Inactive client input does not create or drive an output.</summary>
+    /// <summary>Inactive client input connects output but does not drive reports.</summary>
     [TestMethod]
-    public void InactiveClientInputIsIgnored()
+    public void InactiveClientInputConnectsOutputWithoutDrivingReports()
     {
         Guid clientId = Guid.NewGuid();
         FakeControllerOutputFactory factory = new();
@@ -103,7 +103,8 @@ public sealed class ControllerBrokerTests
             new ControllerState(Standard(ControllerButtons.South), null, null),
             ControllerFeatures.StandardControls);
 
-        Assert.IsEmpty(factory.Outputs);
+        Assert.HasCount(1, factory.Outputs);
+        Assert.AreEqual(0, factory.SingleOutput.SendCount);
     }
 
     /// <summary>Output feedback prefers the Steam endpoint and falls back to physical.</summary>
@@ -166,6 +167,14 @@ public sealed class ControllerBrokerTests
         Assert.AreEqual(1, status.Slots[0].SteamEndpointCount);
         Assert.AreEqual(ControllerFeatures.StandardControls, status.Slots[0].ActiveSteamFeatures);
 
+        broker.SetActiveClient(null);
+        Assert.IsFalse(output.Disposed);
+        Assert.IsTrue(broker.GetStatus().Slots[0].OutputConnected);
+
+        broker.SetActiveClient(clientId);
+        Assert.AreSame(output, factory.SingleOutput);
+        Assert.IsFalse(output.Disposed);
+
         broker.SetControllerOutputEnabled(false);
         Assert.IsTrue(output.Disposed);
 
@@ -214,10 +223,13 @@ public sealed class ControllerBrokerTests
 
         public ControllerState LastState { get; private set; }
 
+        public int SendCount { get; private set; }
+
         public bool Disposed { get; private set; }
 
         public void Send(in ControllerState state)
         {
+            SendCount++;
             LastState = state;
         }
 

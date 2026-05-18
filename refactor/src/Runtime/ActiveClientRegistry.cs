@@ -204,6 +204,7 @@ public sealed class ActiveClientRegistry
             client.ProfileId,
             client.SteamAppId,
             _activeClientId == client.ClientId,
+            client.ReceiverProcesses,
             [.. client.Processes.Values],
             owned,
             blocked);

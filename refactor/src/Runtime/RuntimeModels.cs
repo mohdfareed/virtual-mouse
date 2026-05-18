@@ -25,6 +25,7 @@ public sealed record ClientStatus(
     string ProfileId,
     uint? SteamAppId,
     bool IsActive,
+    IReadOnlyList<string> ReceiverProcesses,
     IReadOnlyList<ObservedGameProcess> ObservedProcesses,
     IReadOnlyList<ObservedGameProcess> OwnedProcesses,
     IReadOnlyList<ObservedGameProcess> BlockedProcesses);

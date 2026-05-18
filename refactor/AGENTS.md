@@ -95,8 +95,10 @@
   the whole physical controller endpoint. Physical motion is the first such
   gate; the physical endpoint remains available for matching, feedback fallback,
   and other supported feature groups.
-- Output devices are connected only while a client actively needs them and are
-  disposed when no active client/profile/toggle uses them.
+- Controller output devices stay connected while any attached client endpoint
+  wants that output kind. Active-client state gates report forwarding, not
+  virtual-device lifetime. Dispose the output only when no attached clients need
+  it or output is explicitly disabled.
 - Keep per-report controller traffic on the `Forwarding` fixed binary pipe
   model. Do not send hot-path controller reports through JSON-RPC.
 - `Hosting` owns controller pipe lifetime for connected clients, but pipe frames

@@ -75,4 +75,38 @@ internal static class GameProcessHost
 
         return killed;
     }
+
+    public static int KillRootAndReceivers(Process root, IReadOnlyList<ObservedGameProcess> receivers)
+    {
+        int killed = Kill(receivers);
+        killed += KillRoot(root);
+        return killed;
+    }
+
+    public static int KillRootAndReceivers(Process root, IReadOnlyList<string> receiverProcesses)
+    {
+        int killed = Kill(FindReceivers(receiverProcesses));
+        killed += KillRoot(root);
+        return killed;
+    }
+
+    private static int KillRoot(Process root)
+    {
+        try
+        {
+            if (!root.HasExited)
+            {
+                root.Kill(entireProcessTree: true);
+                return 1;
+            }
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or
+                NotSupportedException or
+                System.ComponentModel.Win32Exception)
+        {
+        }
+
+        return 0;
+    }
 }

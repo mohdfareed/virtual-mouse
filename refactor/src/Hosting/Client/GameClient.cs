@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,8 @@ public sealed class GameClient(
     VirtualMouseClient client,
     ILogger<GameClient> logger) : IAsyncDisposable
 {
+    private static readonly TimeSpan ReceiverStartupGrace = TimeSpan.FromSeconds(60);
+
     private bool _disposed;
 
     // MARK: Implementation
@@ -37,26 +40,41 @@ public sealed class GameClient(
                 .ConfigureAwait(false);
             using Process process = GameProcessHost.Launch(launch);
             ClientRunState state = new(launch, process, client.ClientId, request);
-            await StartControllerStreamsAsync(state, cancellationToken).ConfigureAwait(false);
-            using CancellationTokenSource keepAliveStop =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            Task keepAlive = client.WaitAsync(keepAliveStop.Token);
-
+            AppDomain.CurrentDomain.ProcessExit += ProcessExit;
             try
             {
-                LogStarted(state);
-                await WatchReceiversAsync(state, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                int killed = GameProcessHost.Kill(state.OwnedProcesses);
-                logger.LogInformation("Stopped owned receiver processes: {Count}", killed);
+                await StartControllerStreamsAsync(state, cancellationToken).ConfigureAwait(false);
+                using CancellationTokenSource keepAliveStop =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                Task keepAlive = client.WaitAsync(keepAliveStop.Token);
+
+                try
+                {
+                    LogStarted(state);
+                    LogReceiverWatch(state);
+                    await WatchReceiversAsync(state, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    StopGameProcesses(state, "Client run cancelled.");
+                }
+                finally
+                {
+                    await EndRunAsync(state).ConfigureAwait(false);
+                    await keepAliveStop.CancelAsync().ConfigureAwait(false);
+                    await IgnoreCancellationAsync(keepAlive).ConfigureAwait(false);
+                }
             }
             finally
             {
-                await EndRunAsync(state).ConfigureAwait(false);
-                await keepAliveStop.CancelAsync().ConfigureAwait(false);
-                await IgnoreCancellationAsync(keepAlive).ConfigureAwait(false);
+                AppDomain.CurrentDomain.ProcessExit -= ProcessExit;
+            }
+
+            void ProcessExit(object? sender, EventArgs args)
+            {
+                _ = sender;
+                _ = args;
+                StopGameProcesses(state, "Client process exiting.");
             }
         }
         finally
@@ -88,6 +106,7 @@ public sealed class GameClient(
         {
             IReadOnlyList<ObservedGameProcess> observed =
                 GameProcessHost.FindReceivers(state.Launch.ReceiverProcesses);
+            LogReceiverChange(state, observed);
             await SendStateAsync(state, observed, cancellationToken).ConfigureAwait(false);
 
             state.SawReceiver |= observed.Count != 0;
@@ -96,7 +115,7 @@ public sealed class GameClient(
                 return;
             }
 
-            if (!state.SawReceiver && state.Process.HasExited)
+            if (!state.SawReceiver && state.Process.HasExited && ReceiverStartupExpired(state))
             {
                 return;
             }
@@ -196,6 +215,85 @@ public sealed class GameClient(
             state.Process.Id);
     }
 
+    private void LogReceiverWatch(ClientRunState state)
+    {
+        logger.LogInformation(
+            "Watching receiver processes for {ProfileId}: {Receivers}",
+            state.Launch.ProfileId,
+            string.Join(", ", state.Launch.ReceiverProcesses));
+    }
+
+    private void LogReceiverChange(
+        ClientRunState state,
+        IReadOnlyList<ObservedGameProcess> observed)
+    {
+        string signature = string.Join(
+            ",",
+            observed.OrderBy(process => process.ProcessId).Select(process => process.ProcessId));
+        if (signature == state.LastObservedSignature)
+        {
+            return;
+        }
+
+        state.LastObservedSignature = signature;
+        logger.LogInformation(
+            "Receiver processes for {ProfileId}: count={Count} {Processes}",
+            state.Launch.ProfileId,
+            observed.Count,
+            observed.Count == 0 ? "none" : FormatProcesses(observed));
+    }
+
+    private static string FormatProcesses(IReadOnlyList<ObservedGameProcess> processes)
+    {
+        return string.Join(
+            ", ",
+            processes
+                .OrderBy(process => process.ProcessId)
+                .Select(process => $"{process.ProcessName}:{process.ProcessId}"));
+    }
+
+    private bool ReceiverStartupExpired(ClientRunState state)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        if (state.RootExitedAt is null)
+        {
+            state.RootExitedAt = now;
+            logger.LogInformation(
+                "Root process exited before receiver detection for {ProfileId}; waiting {Seconds}s for receivers.",
+                state.Launch.ProfileId,
+                ReceiverStartupGrace.TotalSeconds);
+            return false;
+        }
+
+        bool expired = now - state.RootExitedAt >= ReceiverStartupGrace;
+        if (expired)
+        {
+            logger.LogInformation(
+                "No receiver processes appeared for {ProfileId}; ending client run.",
+                state.Launch.ProfileId);
+        }
+
+        return expired;
+    }
+
+    private void StopGameProcesses(ClientRunState state, string reason)
+    {
+        lock (state.StopGate)
+        {
+            if (state.GameStopRequested)
+            {
+                return;
+            }
+
+            state.GameStopRequested = true;
+        }
+
+        int killed = state.OwnedProcesses.Count == 0
+            ? GameProcessHost.KillRootAndReceivers(state.Process, state.Launch.ReceiverProcesses)
+            : GameProcessHost.KillRootAndReceivers(state.Process, state.OwnedProcesses);
+        logger.LogInformation("{Reason} stopped game processes: {Count}", reason, killed);
+    }
+
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -240,5 +338,13 @@ public sealed class GameClient(
         public IReadOnlyList<ObservedGameProcess> OwnedProcesses { get; set; } = [];
 
         public ClientControllerStreams? ControllerStreams { get; set; }
+
+        public string? LastObservedSignature { get; set; }
+
+        public DateTimeOffset? RootExitedAt { get; set; }
+
+        public object StopGate { get; } = new();
+
+        public bool GameStopRequested { get; set; }
     }
 }
