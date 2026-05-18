@@ -54,6 +54,9 @@ Project for local input forwarding transports.
   - [ ] rumble, trigger rumble, light-bar RGB, flash timing
   - [ ] buttons, sticks, triggers, gyro, accel, touchpad
 - [ ] Teensy output architecture and firmware.
+- [ ] Implement proper Steam Input controller identification.
+  - Current implementation only support a single physical Valve-made controller.
+- [ ] HidHide integration for physical controller blocking during xpad emulation.
 - [ ] Packaging/runtime distribution for SDL3 and VIIPER dependencies.
 - [ ] Host protocol versioning, machine-readable diagnostics, and richer
       observability.

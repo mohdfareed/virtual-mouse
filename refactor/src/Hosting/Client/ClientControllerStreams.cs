@@ -15,6 +15,8 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly Lock _writeGate = new();
     private IReadOnlyList<SdlGamepadSource> _sources = [];
+    private IReadOnlyDictionary<SdlGamepadSource, string> _physicalIds =
+        new Dictionary<SdlGamepadSource, string>();
     private NamedPipeClientStream? _pipe;
     private ControllerPipeWriter? _writer;
     private Task? _inputTask;
@@ -30,7 +32,10 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
 
         try
         {
+            IReadOnlyList<SdlControllerInfo> visibleControllers = SdlControllerCatalog.GetControllers();
+            IReadOnlyList<SdlControllerInfo> physicalControllers = GetPhysicalControllers(visibleControllers);
             _sources = SdlControllerCatalog.OpenClientControllers();
+            _physicalIds = CreatePhysicalIds(_sources, physicalControllers);
         }
         catch (InvalidOperationException exception)
         {
@@ -39,7 +44,7 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
             return;
         }
 
-        ClientControllerInfo[] controllers = CreateControllerInfos(_sources);
+        ClientControllerInfo[] controllers = CreateControllerInfos(_sources, _physicalIds);
         await client.RegisterClientControllersAsync(controllers, cancellationToken)
             .ConfigureAwait(false);
         if (_sources.Count == 0)
@@ -114,7 +119,9 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
         }
     }
 
-    private static ClientControllerInfo[] CreateControllerInfos(IReadOnlyList<SdlGamepadSource> sources)
+    private static ClientControllerInfo[] CreateControllerInfos(
+        IReadOnlyList<SdlGamepadSource> sources,
+        IReadOnlyDictionary<SdlGamepadSource, string> physicalIds)
     {
         ClientControllerInfo[] controllers = new ClientControllerInfo[sources.Count];
         for (int i = 0; i < sources.Count; i++)
@@ -122,11 +129,43 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
             SdlGamepadSource source = sources[i];
             controllers[i] = new ClientControllerInfo(
                 checked((ushort)i),
-                SdlControllerCatalog.GetPhysicalControllerId(source.Controller),
+                physicalIds[source],
                 source.Features);
         }
 
         return controllers;
+    }
+
+    private static Dictionary<SdlGamepadSource, string> CreatePhysicalIds(
+        IReadOnlyList<SdlGamepadSource> sources,
+        IReadOnlyList<SdlControllerInfo> physicalControllers)
+    {
+        Dictionary<SdlGamepadSource, string> ids = [];
+        foreach (SdlGamepadSource source in sources)
+        {
+            SdlControllerInfo controller = source.Controller;
+            SdlControllerInfo? physical = SdlControllerMatcher.FindPhysicalController(
+                controller,
+                physicalControllers);
+            ids[source] = SdlControllerCatalog.GetPhysicalControllerId(physical ?? controller);
+        }
+
+        return ids;
+    }
+
+    private static List<SdlControllerInfo> GetPhysicalControllers(
+        IReadOnlyList<SdlControllerInfo> controllers)
+    {
+        List<SdlControllerInfo> physical = [];
+        foreach (SdlControllerInfo controller in controllers)
+        {
+            if (controller.Source == SdlControllerSource.Physical)
+            {
+                physical.Add(controller);
+            }
+        }
+
+        return physical;
     }
 
     private ushort FindSourceIndex(SdlGamepadSource source)

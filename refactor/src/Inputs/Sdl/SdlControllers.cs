@@ -77,11 +77,13 @@ public static class SdlControllerCatalog
         return OpenControllers(static controller => controller.Source == SdlControllerSource.Physical);
     }
 
-    /// <summary>Gets the generic physical slot id used by forwarding.</summary>
+    /// <summary>Gets the physical slot id used by forwarding.</summary>
     public static string GetPhysicalControllerId(SdlControllerInfo controller)
     {
         ArgumentNullException.ThrowIfNull(controller);
-        return $"vidpid:{controller.VendorId:x4}:{controller.ProductId:x4}";
+        return !string.IsNullOrWhiteSpace(controller.Path)
+            ? $"path:{controller.Path}"
+            : $"vidpid:{controller.VendorId:x4}:{controller.ProductId:x4}";
     }
 
     internal static InvalidOperationException CreateSdlUnavailableException(Exception exception)
