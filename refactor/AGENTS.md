@@ -10,7 +10,8 @@
 
 - Call the long-lived process the server, not the host.
 - Keep this foundation small: CLI commands, appsettings, logging, and server/client request-response communication only.
-- Organize the spike by responsibility: `Runtime`, `Hosting`, `Settings`, and `cli`.
+- Organize the spike by responsibility: `Runtime`, `Hosting`, `Settings`,
+  `Forwarding`, `Steam`, and `cli`.
 - Keep active-client and receiver-process ownership in the separate `Runtime`
   project. Do not fold it into Hosting.
 - Keep client, server, request/response protocol, and named-pipe lifecycle management in `Hosting`.
@@ -71,6 +72,25 @@
   own multiple pids.
 - Keep OS process observation and cleanup outside `Runtime`; Runtime is only
   active-client and receiver-pid ownership state.
+- Keep input/output routing in `Forwarding`, not `Hosting` or `Runtime`.
+  `Forwarding` owns logical controller slots, active-client output gates, output
+  device lifetime, Steam-preferred feature merge, and feedback fallback.
+- Model each controller as one logical slot with a Steam endpoint and a physical
+  endpoint. Prefer Steam Input for every readable/writable feature, and use the
+  physical endpoint only when the Steam endpoint is unavailable or does not
+  support that feature.
+- Keep future controller features such as LEDs, touchpads, adaptive triggers,
+  and similar device-specific behavior as feature groups on the logical
+  controller slot. Do not create per-feature route/session abstractions unless a
+  real workflow proves the single-slot model insufficient.
+- Runtime controller toggles should gate feature groups, not attach or detach
+  the whole physical controller endpoint. Physical motion is the first such
+  gate; the physical endpoint remains available for matching, feedback fallback,
+  and other supported feature groups.
+- Output devices are connected only while a client actively needs them and are
+  disposed when no active client/profile/toggle uses them.
+- Keep per-report controller traffic on the `Forwarding` fixed binary pipe
+  model. Do not send hot-path controller reports through JSON-RPC.
 - Server-side active-client orchestration lives in `Hosting/Server`. It observes
   the foreground process id, updates `ActiveClientRegistry`, and dispatches
   active-client changes through simple callbacks. Do not add tiny reaction

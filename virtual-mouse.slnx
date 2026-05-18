@@ -37,6 +37,7 @@
   </Folder>
 
   <Folder Name="/refactor/src/">
+    <Project Path="refactor/src/Forwarding/Forwarding.csproj" />
     <Project Path="refactor/src/Hosting/Hosting.csproj" />
     <Project Path="refactor/src/Runtime/Runtime.csproj" />
     <Project Path="refactor/src/Settings/Settings.csproj" />
