@@ -37,6 +37,7 @@ public sealed record ReceiverProcessClaimStatus(
 
 /// <summary>Status for active-client state.</summary>
 public sealed record ActiveClientRegistryStatus(
+    int ForegroundProcessId,
     Guid? ActiveClientId,
     IReadOnlyList<ClientStatus> Clients,
     IReadOnlyList<ReceiverProcessClaimStatus> ReceiverProcesses);

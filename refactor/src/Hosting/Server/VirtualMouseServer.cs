@@ -13,65 +13,88 @@ using VirtualMouse.Settings.Profiles;
 
 namespace VirtualMouse.Hosting;
 
-// MARK: Dependency Injection
-// ============================================================================
-
-/// <summary>Dependency injection registration for the app-facing server.</summary>
-public static class ServerServices
-{
-    /// <summary>Adds the local server.</summary>
-    public static IServiceCollection AddApplicationServer(this IServiceCollection services)
-    {
-        _ = services.AddSingleton<ActiveClientRegistry>();
-        _ = services.AddSingleton<VirtualMouseServer>();
-        return services;
-    }
-}
-
-// MARK: Implementation
-// ============================================================================
-
 /// <summary>Current server status.</summary>
 public sealed record ServerStatus(int ConnectedClientCount)
 {
     /// <summary>Current active-client runtime status.</summary>
     public ActiveClientRegistryStatus Runtime { get; init; } =
-        new(null, [], []);
+        new(0, null, [], []);
 }
 
-// The app-facing server owns connected clients and accepts client pipes.
+// The app-facing server owns server lifetime and accepts client pipes.
 /// <summary>Long-lived local server for client connections.</summary>
-public sealed class VirtualMouseServer(
-    IOptions<HostingSettings> options,
-    ILogger<VirtualMouseServer> logger,
-    SettingsFile? settingsFile = null,
-    ProfilesService? profiles = null,
-    ActiveClientRegistry? runtime = null)
+public sealed class VirtualMouseServer
 {
-    private readonly ConnectedClients _clients = new();
+    private readonly IOptions<HostingSettings> _options;
+    private readonly ILogger<VirtualMouseServer> _logger;
+    private readonly SettingsFile? _settingsFile;
     private readonly ConcurrentDictionary<ServerConnection, byte> _connections = [];
-    private readonly ActiveClientRegistry _runtime = runtime ?? new ActiveClientRegistry();
+    private readonly ServerSessions _sessions;
+    private readonly ActiveClientOrchestration _activeClients;
 
-    internal IReadOnlyCollection<ConnectedClient> Clients => _clients.Snapshot;
+    /// <summary>Creates a server from configured hosting settings.</summary>
+    public VirtualMouseServer(
+        IOptions<HostingSettings> options,
+        ILogger<VirtualMouseServer> logger)
+        : this(RequireOptions(options), logger, settingsFile: null, profiles: null, runtime: null, activeClients: null)
+    {
+    }
+
+    internal VirtualMouseServer(
+        IOptions<HostingSettings> options,
+        ILogger<VirtualMouseServer> logger,
+        SettingsFile? settingsFile,
+        ProfilesService? profiles,
+        ActiveClientRegistry? runtime,
+        ActiveClientOrchestration? activeClients)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        _options = options;
+        _logger = logger;
+        _settingsFile = settingsFile;
+        ActiveClientRegistry activeRuntime = runtime ?? new ActiveClientRegistry();
+        _sessions = new ServerSessions(logger, profiles, activeRuntime);
+        _activeClients = activeClients ?? ActiveClientOrchestration.CreateDefault(
+            activeRuntime,
+            options.Value,
+            logger);
+    }
+
+    internal IReadOnlyCollection<ConnectedClient> Clients => _sessions.Clients;
 
     // MARK: API
     // ========================================================================
 
+    /// <summary>Adds the local server.</summary>
+    public static IServiceCollection AddServices(IServiceCollection services)
+    {
+        _ = services.AddSingleton<ActiveClientRegistry>();
+        _ = services.AddSingleton(static services => new VirtualMouseServer(
+            services.GetRequiredService<IOptions<HostingSettings>>(),
+            services.GetRequiredService<ILogger<VirtualMouseServer>>(),
+            services.GetService<SettingsFile>(),
+            services.GetService<ProfilesService>(),
+            services.GetRequiredService<ActiveClientRegistry>(),
+            activeClients: null));
+        return services;
+    }
+
     /// <summary>Runs the server until cancellation.</summary>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        string pipeName = options.Value.PipeName;
-        logger.LogInformation("Listening on server pipe {PipeName}", pipeName);
+        string pipeName = _options.Value.PipeName;
+        _logger.LogInformation("Listening on server pipe {PipeName}", pipeName);
 
-        if (settingsFile is not null)
+        if (_settingsFile is not null)
         {
-            logger.LogInformation("Using settings {SettingsPath}", settingsFile.Path);
+            _logger.LogInformation("Using settings {SettingsPath}", _settingsFile.Path);
         }
 
-        if (profiles is not null)
-        {
-            logger.LogInformation("Profile settings enabled");
-        }
+        using CancellationTokenSource orchestrationStop =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Task orchestrationTask = _activeClients.RunAsync(orchestrationStop.Token);
 
         try
         {
@@ -88,7 +111,7 @@ public sealed class VirtualMouseServer(
                 {
                     await pipe.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
                     NamedPipeServerStream connectedPipe = pipe;
-                    ServerConnection connection = new(connectedPipe, this);
+                    ServerConnection connection = new(connectedPipe, _sessions);
                     _connections[connection] = 0;
                     _ = Task.Run(() => RunConnectionAsync(connection, cancellationToken), CancellationToken.None);
                     pipe = null;
@@ -104,6 +127,8 @@ public sealed class VirtualMouseServer(
         }
         finally
         {
+            await orchestrationStop.CancelAsync().ConfigureAwait(false);
+            await IgnoreCancellationAsync(orchestrationTask).ConfigureAwait(false);
             await DisposeConnectionsAsync().ConfigureAwait(false);
         }
     }
@@ -131,90 +156,20 @@ public sealed class VirtualMouseServer(
         }
     }
 
-    // MARK: Server API
-    // ========================================================================
-
-    internal Guid ConnectClient(int processId)
+    private static async Task IgnoreCancellationAsync(Task task)
     {
-        ConnectedClient client = _clients.Add(processId);
-        logger.LogInformation(
-            "Client connected: {ClientId} process={ProcessId} (clients={ClientCount})",
-            client.Id,
-            client.ProcessId,
-            _clients.Count);
-        return client.Id;
-    }
-
-    internal void DisconnectClient(Guid clientId)
-    {
-        _clients.Remove(clientId);
-        _runtime.RemoveClient(clientId);
-        logger.LogInformation(
-            "Client disconnected: {ClientId} (clients={ClientCount})",
-            clientId,
-            _clients.Count);
-    }
-
-    internal Task<ServerStatus> GetStatusAsync()
-    {
-        return Task.FromResult(new ServerStatus(_clients.Count)
+        try
         {
-            Runtime = _runtime.GetStatus(),
-        });
-    }
-
-    internal Task<ClientRunLaunch> StartRunAsync(Guid clientId, string profileId)
-    {
-        if (profiles is null)
-        {
-            throw new InvalidOperationException("Profile settings are not available.");
+            await task.ConfigureAwait(false);
         }
-
-        GameProfile profile = profiles.GetProfile(profileId) ??
-            throw new InvalidOperationException($"Profile \"{profileId}\" was not found.");
-        ResolvedGameProfile resolved = ProfileResolver.Resolve(profileId, profile);
-        ConnectedClient client = _clients.Get(clientId);
-        _runtime.RegisterClient(
-            clientId,
-            client.ProcessId,
-            resolved.Id,
-            resolved.ReceiverProcesses);
-
-        return Task.FromResult(new ClientRunLaunch(
-            resolved.Id,
-            resolved.Title,
-            resolved.Executable,
-            resolved.Arguments,
-            resolved.WorkingDirectory,
-            resolved.ReceiverProcesses,
-            resolved.ControllerOutput,
-            resolved.MouseOutput));
-    }
-
-    internal Task UpdateRunProcessesAsync(
-        Guid clientId,
-        IReadOnlyList<ObservedGameProcess> processes)
-    {
-        _runtime.UpdateClientProcesses(clientId, processes);
-        return Task.CompletedTask;
-    }
-
-    internal Task<IReadOnlyList<ObservedGameProcess>> GetOwnedReceiverProcessesAsync(Guid clientId)
-    {
-        return Task.FromResult(_runtime.GetOwnedProcesses(clientId));
-    }
-
-    internal Task EndRunAsync(Guid clientId)
-    {
-        _runtime.RemoveClient(clientId);
-        return Task.CompletedTask;
-    }
-
-    internal void ConnectionClosed(Exception exception)
-    {
-        if (exception is not OperationCanceledException)
+        catch (OperationCanceledException)
         {
-            logger.LogInformation("Client pipe closed: {Message}", exception.Message);
         }
+    }
+
+    private static IOptions<HostingSettings> RequireOptions(IOptions<HostingSettings> options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return options;
     }
 }

@@ -39,6 +39,9 @@ public sealed class HostingSettings
 
     /// <summary>Delay between keepalive acknowledgements.</summary>
     public int KeepAliveMilliseconds { get; set; } = 1000;
+
+    /// <summary>Delay between foreground-window checks.</summary>
+    public int ForegroundPollMilliseconds { get; set; } = 100;
 }
 
 /// <summary>General application settings.</summary>

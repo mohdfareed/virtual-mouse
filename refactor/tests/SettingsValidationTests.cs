@@ -30,6 +30,7 @@ public sealed class SettingsValidationTests
                 services.GetRequiredService<ApplicationSettingsService>);
 
             StringAssert.Contains(exception.Message, "hosting:pipeName", StringComparison.Ordinal);
+            StringAssert.Contains(exception.Message, "hosting:foregroundPollMilliseconds", StringComparison.Ordinal);
             StringAssert.Contains(exception.Message, "general:viiperPort", StringComparison.Ordinal);
             StringAssert.Contains(exception.Message, "games:bad:executable", StringComparison.Ordinal);
         }
@@ -111,7 +112,8 @@ public sealed class SettingsValidationTests
             "Hosting": {
               "PipeName": "",
               "ReconnectDelayMilliseconds": 0,
-              "KeepAliveMilliseconds": 0
+              "KeepAliveMilliseconds": 0,
+              "ForegroundPollMilliseconds": 0
             },
             "General": {
               "ViiperHost": "localhost",

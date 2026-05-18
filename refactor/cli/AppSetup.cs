@@ -20,7 +20,7 @@ internal static class AppSetup
 
         _ = builder.Services.AddApplicationSettings(builder.Configuration, settingsPath);
         _ = builder.Services.AddApplicationClient();
-        _ = builder.Services.AddApplicationServer();
+        _ = VirtualMouseServer.AddServices(builder.Services);
         _ = builder.Services.AddProfiles();
         _ = builder.Logging.AddConsole();
         VirtualMouseSettings settings = new();

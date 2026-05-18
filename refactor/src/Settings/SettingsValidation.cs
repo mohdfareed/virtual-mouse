@@ -37,6 +37,11 @@ internal static class SettingsValidation
         {
             failures.Add("hosting:keepAliveMilliseconds must be greater than zero.");
         }
+
+        if (settings.ForegroundPollMilliseconds <= 0)
+        {
+            failures.Add("hosting:foregroundPollMilliseconds must be greater than zero.");
+        }
     }
 
     private static void ValidateGeneral(GeneralSettings settings, List<string> failures)

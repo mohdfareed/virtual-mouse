@@ -135,6 +135,7 @@ public sealed class ActiveClientRegistry
         lock (_gate)
         {
             return new ActiveClientRegistryStatus(
+                _foregroundProcessId,
                 _activeClientId,
                 [.. _clients.Values.Select(ToStatus)],
                 [.. _claims.Select(ToClaimStatus)]);

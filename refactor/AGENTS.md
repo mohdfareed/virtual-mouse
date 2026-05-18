@@ -20,6 +20,10 @@
   only for pipe/RPC plumbing. Avoid generic names such as `Runner`, `Tools`,
   `Manager`, or `Helper` unless the file is genuinely tiny glue.
 - Keep app-facing hosting classes readable first; move per-connection plumbing into internal helper types when it starts hiding the public contract.
+- Keep `VirtualMouseServer` focused on server lifetime and pipe acceptance.
+  Connected-client state, profile run state, status, and runtime updates belong
+  in `ServerSessions`; pipe RPC target code should talk to `ServerSessions`, not
+  to the app-facing server object.
 - In `Hosting`, keep user-facing public types at the project root. Put internal protocol, pipe, connection, and registry plumbing under `Shared`.
 - Keep `ClientConnection` focused on connection lifecycle. Server API calls such as status belong on `VirtualMouseClient` and use the connection pipe internally.
 - Keep server-owned status construction on server state/root server code. `ServerConnection` should dispatch status requests, not decide what status contains.
@@ -49,6 +53,10 @@
 - Profiles choose output explicitly with separate `ControllerOutput` and `MouseOutput` values. Do not reintroduce a vague combined output mode.
 - Resolve raw game profile settings through a simple helper, not a DI service. The resolver owns runtime defaults such as title, working directory, receiver process names, and environment-expanded paths.
 - Put app-owned settings under the `VirtualMouse` root in appsettings. Do not use top-level `Logging` for app settings; it is owned by Microsoft.Extensions.Logging provider configuration.
+- Keep `refactor/cli/appsettings.json` as a practical starter config: small,
+  usable, and not just empty defaults. Keep `refactor/cli/appsettings.example.json`
+  as the compact complete reference with every supported field assigned a
+  meaningful value that demonstrates the setting.
 - File logging is configured from `VirtualMouse:Logging:LogFile` at startup. Do not add reloadable logging until a real workflow needs it.
 - Keep useful smoke checks as repeatable tests under `tests`, and expose them through `script/test.ps1`.
 - Do not add profiles, routes, input devices, output devices, or session orchestration until the communication foundation is stable.
@@ -63,5 +71,9 @@
   own multiple pids.
 - Keep OS process observation and cleanup outside `Runtime`; Runtime is only
   active-client and receiver-pid ownership state.
+- Server-side active-client orchestration lives in `Hosting/Server`. It observes
+  the foreground process id, updates `ActiveClientRegistry`, and dispatches
+  active-client changes through simple callbacks. Do not add tiny reaction
+  wrapper types until there are multiple real reactions with different behavior.
 - Do not add Steam Input forcing to active-client runtime. Steam forcing should
   subscribe to active-client changes later.

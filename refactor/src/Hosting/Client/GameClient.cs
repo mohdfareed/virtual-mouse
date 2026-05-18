@@ -17,6 +17,9 @@ public sealed class GameClient(
 {
     private bool _disposed;
 
+    // MARK: Implementation
+    // ========================================================================
+
     /// <summary>Launches a profile and reports receiver processes until it exits.</summary>
     public async Task RunAsync(string profileId, CancellationToken cancellationToken)
     {
@@ -68,6 +71,9 @@ public sealed class GameClient(
         _disposed = true;
         await client.DisposeAsync().ConfigureAwait(false);
     }
+
+    // MARK: Helpers
+    // ========================================================================
 
     private async Task WatchReceiversAsync(
         string profileId,

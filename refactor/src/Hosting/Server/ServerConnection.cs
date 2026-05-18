@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipes;
@@ -10,40 +9,12 @@ using VirtualMouse.Runtime;
 
 namespace VirtualMouse.Hosting;
 
-internal sealed record ConnectedClient(Guid Id, int ProcessId, DateTimeOffset ConnectedAt);
-
-internal sealed class ConnectedClients
-{
-    private readonly ConcurrentDictionary<Guid, ConnectedClient> _clients = [];
-
-    internal IReadOnlyCollection<ConnectedClient> Snapshot => [.. _clients.Values];
-
-    internal int Count => _clients.Count;
-
-    internal ConnectedClient Add(int processId)
-    {
-        ConnectedClient client = new(Guid.NewGuid(), processId, DateTimeOffset.UtcNow);
-        _clients[client.Id] = client;
-        return client;
-    }
-
-    internal void Remove(Guid clientId)
-    {
-        _ = _clients.TryRemove(clientId, out _);
-    }
-
-    internal ConnectedClient Get(Guid clientId)
-    {
-        return _clients.TryGetValue(clientId, out ConnectedClient? client)
-            ? client
-            : throw new InvalidOperationException($"Client {clientId} is not connected.");
-    }
-}
-
 internal sealed class ServerConnection(
     NamedPipeServerStream pipe,
-    VirtualMouseServer server) : IAsyncDisposable
+    ServerSessions sessions) : IVirtualMouseServerApi, IAsyncDisposable
 {
+    private Guid? _clientId;
+
     internal async Task RunAsync(CancellationToken cancellationToken)
     {
         await using (pipe.ConfigureAwait(false))
@@ -53,8 +24,7 @@ internal sealed class ServerConnection(
                 ((Stream)target!).Dispose();
             }, pipe);
 
-            ServerConnectionTarget target = new(server);
-            using JsonRpc rpc = JsonRpc.Attach(pipe, target);
+            using JsonRpc rpc = JsonRpc.Attach(pipe, this);
 
             try
             {
@@ -62,11 +32,11 @@ internal sealed class ServerConnection(
             }
             catch (Exception exception) when (IsDisconnect(exception))
             {
-                server.ConnectionClosed(exception);
+                sessions.ConnectionClosed(exception);
             }
             finally
             {
-                target.Dispose();
+                DisconnectClient();
             }
         }
     }
@@ -85,11 +55,6 @@ internal sealed class ServerConnection(
     {
         return exception is IOException or EndOfStreamException or ObjectDisposedException or OperationCanceledException;
     }
-}
-
-internal sealed class ServerConnectionTarget(VirtualMouseServer server) : IVirtualMouseServerApi, IDisposable
-{
-    private Guid? _clientId;
 
     public Task<Guid> ConnectAsync(int processId)
     {
@@ -98,7 +63,7 @@ internal sealed class ServerConnectionTarget(VirtualMouseServer server) : IVirtu
             throw new InvalidOperationException("Client is already connected.");
         }
 
-        _clientId = server.ConnectClient(processId);
+        _clientId = sessions.ConnectClient(processId);
         return Task.FromResult(_clientId.Value);
     }
 
@@ -109,34 +74,34 @@ internal sealed class ServerConnectionTarget(VirtualMouseServer server) : IVirtu
 
     public Task<ServerStatus> GetStatusAsync()
     {
-        return server.GetStatusAsync();
+        return sessions.GetStatusAsync();
     }
 
     public Task<ClientRunLaunch> StartRunAsync(string profileId)
     {
-        return server.StartRunAsync(GetClientId(), profileId);
+        return sessions.StartRunAsync(GetClientId(), profileId);
     }
 
     public Task UpdateRunProcessesAsync(IReadOnlyList<ObservedGameProcess> processes)
     {
-        return server.UpdateRunProcessesAsync(GetClientId(), processes);
+        return sessions.UpdateRunProcessesAsync(GetClientId(), processes);
     }
 
     public Task<IReadOnlyList<ObservedGameProcess>> GetOwnedReceiverProcessesAsync()
     {
-        return server.GetOwnedReceiverProcessesAsync(GetClientId());
+        return sessions.GetOwnedReceiverProcessesAsync(GetClientId());
     }
 
     public Task EndRunAsync()
     {
-        return server.EndRunAsync(GetClientId());
+        return sessions.EndRunAsync(GetClientId());
     }
 
-    public void Dispose()
+    private void DisconnectClient()
     {
         if (_clientId is Guid clientId)
         {
-            server.DisconnectClient(clientId);
+            sessions.DisconnectClient(clientId);
             _clientId = null;
         }
     }
