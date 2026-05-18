@@ -5,7 +5,7 @@
     <IsPackable>false</IsPackable>
     <ImplicitUsings>disabled</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <NoWarn>$(NoWarn);CA1515;CA2007</NoWarn>
+    <NoWarn>$(NoWarn);CA1515;CA2007;CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,7 +18,9 @@
   <ItemGroup>
     <ProjectReference Include="..\src\Hosting\Hosting.csproj" />
     <ProjectReference Include="..\src\Forwarding\Forwarding.csproj" />
+    <ProjectReference Include="..\src\Inputs\Sdl\Inputs.Sdl.csproj" />
     <ProjectReference Include="..\src\Runtime\Runtime.csproj" />
+    <ProjectReference Include="..\src\Outputs\Viiper\Outputs.Viiper.csproj" />
     <ProjectReference Include="..\src\Settings\Settings.csproj" />
     <ProjectReference Include="..\src\Steam\Steam.csproj" />
   </ItemGroup>

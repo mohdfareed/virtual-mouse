@@ -72,6 +72,39 @@ public enum ControllerButtons
 
     /// <summary>Top face button.</summary>
     North = 1 << 3,
+
+    /// <summary>View, select, or back button.</summary>
+    Back = 1 << 4,
+
+    /// <summary>System guide button.</summary>
+    Guide = 1 << 5,
+
+    /// <summary>Menu, options, or start button.</summary>
+    Start = 1 << 6,
+
+    /// <summary>Left stick click.</summary>
+    LeftStick = 1 << 7,
+
+    /// <summary>Right stick click.</summary>
+    RightStick = 1 << 8,
+
+    /// <summary>Left shoulder button.</summary>
+    LeftShoulder = 1 << 9,
+
+    /// <summary>Right shoulder button.</summary>
+    RightShoulder = 1 << 10,
+
+    /// <summary>D-pad up.</summary>
+    DPadUp = 1 << 11,
+
+    /// <summary>D-pad down.</summary>
+    DPadDown = 1 << 12,
+
+    /// <summary>D-pad left.</summary>
+    DPadLeft = 1 << 13,
+
+    /// <summary>D-pad right.</summary>
+    DPadRight = 1 << 14,
 }
 
 /// <summary>Buttons, sticks, and triggers.</summary>

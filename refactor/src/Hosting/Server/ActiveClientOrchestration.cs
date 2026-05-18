@@ -20,13 +20,14 @@ internal sealed class ActiveClientOrchestration(
         ActiveClientRegistry runtime,
         HostingSettings settings,
         ILogger logger,
-        ControllerBroker? forwarding = null)
+        ControllerBroker? forwarding = null,
+        MouseBroker? mouseForwarding = null)
     {
         return new ActiveClientOrchestration(
             runtime,
             GetForegroundProcessId,
             TimeSpan.FromMilliseconds(settings.ForegroundPollMilliseconds),
-            args => ActiveClientChanged(runtime, logger, new SteamInputClient(), forwarding, args));
+            args => ActiveClientChanged(runtime, logger, new SteamInputClient(), forwarding, mouseForwarding, args));
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -75,6 +76,7 @@ internal sealed class ActiveClientOrchestration(
         ILogger logger,
         SteamInputClient steam,
         ControllerBroker? forwarding,
+        MouseBroker? mouseForwarding,
         ActiveClientChangedEventArgs args)
     {
         logger.LogInformation(
@@ -82,6 +84,7 @@ internal sealed class ActiveClientOrchestration(
             args.PreviousClientId?.ToString() ?? "none",
             args.CurrentClientId?.ToString() ?? "none");
         forwarding?.SetActiveClient(args.CurrentClientId);
+        mouseForwarding?.SetActiveClient(args.CurrentClientId);
 
         try
         {

@@ -11,7 +11,7 @@
 - Call the long-lived process the server, not the host.
 - Keep this foundation small: CLI commands, appsettings, logging, and server/client request-response communication only.
 - Organize the spike by responsibility: `Runtime`, `Hosting`, `Settings`,
-  `Forwarding`, `Steam`, and `cli`.
+  `Forwarding`, `Steam`, `Inputs`, `Outputs`, and `cli`.
 - Keep active-client and receiver-process ownership in the separate `Runtime`
   project. Do not fold it into Hosting.
 - Keep client, server, request/response protocol, and named-pipe lifecycle management in `Hosting`.
@@ -75,6 +75,9 @@
 - Keep input/output routing in `Forwarding`, not `Hosting` or `Runtime`.
   `Forwarding` owns logical controller slots, active-client output gates, output
   device lifetime, Steam-preferred feature merge, and feedback fallback.
+- Keep canonical hot-path report models and source-to-output mappers in
+  `Forwarding`. Adapter projects such as `Inputs/Sdl` and `Outputs/Viiper`
+  should translate between device libraries and those canonical models only.
 - Model each controller as one logical slot with a Steam endpoint and a physical
   endpoint. Prefer Steam Input for every readable/writable feature, and use the
   physical endpoint only when the Steam endpoint is unavailable or does not
@@ -105,6 +108,9 @@
   Steam app id when present.
 - Keep refactor Steam integration in `refactor/src/Steam`. Do not reference
   legacy `src/SteamInput` from refactor projects.
+- Keep refactor input/output adapters in `refactor/src/Inputs` and
+  `refactor/src/Outputs`. Do not reference legacy adapter projects from
+  refactor projects.
 - Keep Steam ROM Manager export in the refactor Steam project; CLI commands only
   orchestrate it from appsettings and print the result.
 - Keep `SteamInputClient`'s public API narrow: `DesktopConfigAppId`,

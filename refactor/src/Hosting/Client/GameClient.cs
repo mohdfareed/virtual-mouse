@@ -37,6 +37,7 @@ public sealed class GameClient(
                 .ConfigureAwait(false);
             using Process process = GameProcessHost.Launch(launch);
             ClientRunState state = new(launch, process, client.ClientId, request);
+            await StartControllerStreamsAsync(state, cancellationToken).ConfigureAwait(false);
             using CancellationTokenSource keepAliveStop =
                 CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             Task keepAlive = client.WaitAsync(keepAliveStop.Token);
@@ -119,10 +120,12 @@ public sealed class GameClient(
         {
             if (state.RegisteredClientId != client.ClientId)
             {
+                await StopControllerStreamsAsync(state).ConfigureAwait(false);
                 state.Launch = await client
                     .StartRunAsync(state.Request, cancellationToken)
                     .ConfigureAwait(false);
                 state.RegisteredClientId = client.ClientId;
+                await StartControllerStreamsAsync(state, cancellationToken).ConfigureAwait(false);
                 logger.LogInformation(
                     "Restored server registration for {ProfileId} client={ClientId}",
                     state.Launch.ProfileId,
@@ -142,6 +145,7 @@ public sealed class GameClient(
 
     private async Task EndRunAsync(ClientRunState state)
     {
+        await StopControllerStreamsAsync(state).ConfigureAwait(false);
         if (client.State != ClientConnectionState.Connected ||
             state.RegisteredClientId != client.ClientId)
         {
@@ -164,6 +168,24 @@ public sealed class GameClient(
             "Connection changed: {State} client={ClientId}",
             update.State,
             update.ClientId?.ToString() ?? "none");
+    }
+
+    private async Task StartControllerStreamsAsync(
+        ClientRunState state,
+        CancellationToken cancellationToken)
+    {
+        ClientControllerStreams streams = new(logger);
+        await streams.StartAsync(client, state.Launch, cancellationToken).ConfigureAwait(false);
+        state.ControllerStreams = streams;
+    }
+
+    private static async Task StopControllerStreamsAsync(ClientRunState state)
+    {
+        if (state.ControllerStreams is not null)
+        {
+            await state.ControllerStreams.DisposeAsync().ConfigureAwait(false);
+            state.ControllerStreams = null;
+        }
     }
 
     private void LogStarted(ClientRunState state)
@@ -216,5 +238,7 @@ public sealed class GameClient(
         public bool SawReceiver { get; set; }
 
         public IReadOnlyList<ObservedGameProcess> OwnedProcesses { get; set; } = [];
+
+        public ClientControllerStreams? ControllerStreams { get; set; }
     }
 }

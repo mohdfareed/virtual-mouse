@@ -51,7 +51,7 @@ public sealed class HostingForwardingTests
                 TimeSpan.FromMilliseconds(options.ForegroundPollMilliseconds),
                 args => broker.SetActiveClient(args.CurrentClientId));
 
-            VirtualMouseServer server = new(
+            await using VirtualMouseServer server = new(
                 Options.Create(options),
                 NullLogger<VirtualMouseServer>.Instance,
                 settingsFile: null,

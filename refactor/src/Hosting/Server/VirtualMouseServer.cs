@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using VirtualMouse.Forwarding;
+using VirtualMouse.Outputs.Viiper;
 using VirtualMouse.Runtime;
 using VirtualMouse.Settings;
 using VirtualMouse.Settings.Profiles;
@@ -24,11 +25,15 @@ public sealed record ServerStatus(int ConnectedClientCount)
     /// <summary>Current controller forwarding status.</summary>
     public ControllerBrokerStatus Forwarding { get; init; } =
         new(null, ControllerOutputEnabled: true, PhysicalMotionEnabled: true, []);
+
+    /// <summary>Current mouse forwarding status.</summary>
+    public MouseBrokerStatus MouseForwarding { get; init; } =
+        new(null, MouseOutputEnabled: true, OutputConnected: false, VirtualMouse.Forwarding.MouseOutput.None);
 }
 
 // The app-facing server owns server lifetime and accepts client pipes.
 /// <summary>Long-lived local server for client connections.</summary>
-public sealed class VirtualMouseServer
+public sealed class VirtualMouseServer : IAsyncDisposable
 {
     private readonly IOptions<HostingSettings> _options;
     private readonly ILogger<VirtualMouseServer> _logger;
@@ -36,6 +41,8 @@ public sealed class VirtualMouseServer
     private readonly ConcurrentDictionary<ServerConnection, byte> _connections = [];
     private readonly ServerSessions _sessions;
     private readonly ActiveClientOrchestration _activeClients;
+    private readonly PhysicalControllerPump _physicalControllers;
+    private readonly MouseInputPump _mouseInput;
 
     /// <summary>Creates a server from configured hosting settings.</summary>
     public VirtualMouseServer(
@@ -52,7 +59,8 @@ public sealed class VirtualMouseServer
         ProfilesService? profiles,
         ActiveClientRegistry? runtime,
         ActiveClientOrchestration? activeClients,
-        ControllerBroker? forwarding = null)
+        ControllerBroker? forwarding = null,
+        MouseBroker? mouseForwarding = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
@@ -63,19 +71,24 @@ public sealed class VirtualMouseServer
 
         ActiveClientRegistry activeRuntime = runtime ?? new ActiveClientRegistry();
         ControllerBroker broker = forwarding ?? new ControllerBroker(new NoopControllerOutputFactory());
+        MouseBroker mouseBroker = mouseForwarding ?? new MouseBroker(new NoopMouseOutputFactory());
 
         _sessions = new ServerSessions(
             logger,
             profiles,
             activeRuntime,
             broker,
+            mouseBroker,
             new ControllerPipeSessions(broker, logger));
 
         _activeClients = activeClients ?? ActiveClientOrchestration.CreateDefault(
             activeRuntime,
             options.Value,
             logger,
-            broker);
+            broker,
+            mouseBroker);
+        _physicalControllers = new PhysicalControllerPump(broker, logger);
+        _mouseInput = new MouseInputPump(mouseBroker, logger);
     }
 
     internal IReadOnlyCollection<ConnectedClient> Clients => _sessions.Clients;
@@ -87,8 +100,23 @@ public sealed class VirtualMouseServer
     public static IServiceCollection AddServices(IServiceCollection services)
     {
         _ = services.AddSingleton<ActiveClientRegistry>();
-        _ = services.AddSingleton<IControllerOutputFactory, NoopControllerOutputFactory>();
+        _ = services.AddSingleton(static services =>
+        {
+            GeneralSettings settings = services.GetRequiredService<IOptions<GeneralSettings>>().Value;
+            ILoggerFactory loggerFactory = services.GetRequiredService<ILoggerFactory>();
+            return new ViiperOutputFactory(new ViiperOptions
+            {
+                Host = settings.ViiperHost,
+                Port = settings.ViiperPort,
+                Logger = loggerFactory.CreateLogger<ViiperOutputFactory>(),
+            });
+        });
+        _ = services.AddSingleton<IControllerOutputFactory>(
+            static services => services.GetRequiredService<ViiperOutputFactory>());
+        _ = services.AddSingleton<IMouseOutputFactory>(
+            static services => services.GetRequiredService<ViiperOutputFactory>());
         _ = services.AddSingleton<ControllerBroker>();
+        _ = services.AddSingleton<MouseBroker>();
         _ = services.AddSingleton(static services => new VirtualMouseServer(
             services.GetRequiredService<IOptions<HostingSettings>>(),
             services.GetRequiredService<ILogger<VirtualMouseServer>>(),
@@ -96,7 +124,8 @@ public sealed class VirtualMouseServer
             services.GetService<ProfilesService>(),
             services.GetRequiredService<ActiveClientRegistry>(),
             activeClients: null,
-            services.GetRequiredService<ControllerBroker>()));
+            services.GetRequiredService<ControllerBroker>(),
+            services.GetRequiredService<MouseBroker>()));
         return services;
     }
 
@@ -114,6 +143,8 @@ public sealed class VirtualMouseServer
         using CancellationTokenSource orchestrationStop =
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task orchestrationTask = _activeClients.RunAsync(orchestrationStop.Token);
+        _physicalControllers.Start(orchestrationStop.Token);
+        _mouseInput.Start(orchestrationStop.Token);
 
         try
         {
@@ -148,8 +179,18 @@ public sealed class VirtualMouseServer
         {
             await orchestrationStop.CancelAsync().ConfigureAwait(false);
             await IgnoreCancellationAsync(orchestrationTask).ConfigureAwait(false);
+            await _physicalControllers.DisposeAsync().ConfigureAwait(false);
+            await _mouseInput.DisposeAsync().ConfigureAwait(false);
             await DisposeConnectionsAsync().ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Stops server-owned pumps.</summary>
+    public async ValueTask DisposeAsync()
+    {
+        await _physicalControllers.DisposeAsync().ConfigureAwait(false);
+        await _mouseInput.DisposeAsync().ConfigureAwait(false);
+        await DisposeConnectionsAsync().ConfigureAwait(false);
     }
 
     // MARK: Helpers

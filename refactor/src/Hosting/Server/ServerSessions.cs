@@ -7,7 +7,9 @@ using VirtualMouse.Forwarding;
 using VirtualMouse.Runtime;
 using VirtualMouse.Settings.Profiles;
 using ForwardingControllerOutput = VirtualMouse.Forwarding.ControllerOutput;
+using ForwardingMouseOutput = VirtualMouse.Forwarding.MouseOutput;
 using ProfileControllerOutput = VirtualMouse.Settings.Profiles.ControllerOutput;
+using ProfileMouseOutput = VirtualMouse.Settings.Profiles.MouseOutput;
 
 namespace VirtualMouse.Hosting;
 
@@ -18,6 +20,7 @@ internal sealed class ServerSessions(
     ProfilesService? profiles,
     ActiveClientRegistry runtime,
     ControllerBroker forwarding,
+    MouseBroker mouseForwarding,
     ControllerPipeSessions controllerPipes)
 {
     private readonly ConcurrentDictionary<Guid, ConnectedClient> _clients = [];
@@ -41,6 +44,7 @@ internal sealed class ServerSessions(
         _ = _clients.TryRemove(clientId, out _);
         runtime.RemoveClient(clientId);
         forwarding.RemoveClient(clientId);
+        mouseForwarding.RemoveClient(clientId);
         await controllerPipes.RemoveAsync(clientId).ConfigureAwait(false);
 
         logger.LogInformation(
@@ -55,6 +59,7 @@ internal sealed class ServerSessions(
         {
             Runtime = runtime.GetStatus(),
             Forwarding = forwarding.GetStatus(),
+            MouseForwarding = mouseForwarding.GetStatus(),
         });
     }
 
@@ -80,6 +85,7 @@ internal sealed class ServerSessions(
             resolved.ReceiverProcesses);
 
         forwarding.RegisterClient(clientId, MapControllerOutput(resolved.ControllerOutput));
+        mouseForwarding.RegisterClient(clientId, MapMouseOutput(resolved.MouseOutput));
         string controllerPipeName = controllerPipes.Start(clientId);
 
         return Task.FromResult(new ClientRunLaunch(
@@ -120,6 +126,7 @@ internal sealed class ServerSessions(
     {
         runtime.RemoveClient(clientId);
         forwarding.RemoveClient(clientId);
+        mouseForwarding.RemoveClient(clientId);
         await controllerPipes.RemoveAsync(clientId).ConfigureAwait(false);
     }
 
@@ -146,6 +153,16 @@ internal sealed class ServerSessions(
             ProfileControllerOutput.Xbox360 => ForwardingControllerOutput.Xbox360,
             ProfileControllerOutput.Ds4 => ForwardingControllerOutput.Ds4,
             _ => throw new ArgumentOutOfRangeException(nameof(output), output, "Unknown controller output."),
+        };
+    }
+
+    private static ForwardingMouseOutput MapMouseOutput(ProfileMouseOutput output)
+    {
+        return output switch
+        {
+            ProfileMouseOutput.None => ForwardingMouseOutput.None,
+            ProfileMouseOutput.Viiper => ForwardingMouseOutput.Viiper,
+            _ => throw new ArgumentOutOfRangeException(nameof(output), output, "Unknown mouse output."),
         };
     }
 }

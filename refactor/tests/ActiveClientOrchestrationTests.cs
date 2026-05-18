@@ -33,6 +33,7 @@ public sealed class ActiveClientOrchestrationTests
 
         using CancellationTokenSource stop = new();
         Task task = activeClients.RunAsync(stop.Token);
+
         try
         {
             Volatile.Write(ref foregroundProcessId, 123);
@@ -69,6 +70,7 @@ public sealed class ActiveClientOrchestrationTests
             PipeName = "VirtualMouse.Refactor.Tests." + Guid.NewGuid().ToString("N"),
             ForegroundPollMilliseconds = 5,
         };
+
         ActiveClientRegistry runtime = new();
         int foregroundProcessId = 0;
         ActiveClientOrchestration activeClients = new(
@@ -76,7 +78,8 @@ public sealed class ActiveClientOrchestrationTests
             () => Volatile.Read(ref foregroundProcessId),
             TimeSpan.FromMilliseconds(options.ForegroundPollMilliseconds),
             static _ => { });
-        VirtualMouseServer server = new(
+
+        await using VirtualMouseServer server = new(
             Options.Create(options),
             NullLogger<VirtualMouseServer>.Instance,
             settingsFile: null,
@@ -86,6 +89,7 @@ public sealed class ActiveClientOrchestrationTests
 
         using CancellationTokenSource stop = new();
         Task task = server.RunAsync(stop.Token);
+
         try
         {
             Volatile.Write(ref foregroundProcessId, 321);

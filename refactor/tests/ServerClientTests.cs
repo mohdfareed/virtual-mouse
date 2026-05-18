@@ -19,7 +19,7 @@ public sealed class ServerClientTests
     {
         HostingSettings options = CreateOptions();
         using CancellationTokenSource serverStop = new();
-        VirtualMouseServer server = CreateServer(options);
+        await using VirtualMouseServer server = CreateServer(options);
         Task serverTask = server.RunAsync(serverStop.Token);
 
         await using VirtualMouseClient client = CreateClient(options);
@@ -42,7 +42,7 @@ public sealed class ServerClientTests
     {
         HostingSettings options = CreateOptions();
         using CancellationTokenSource serverOneStop = new();
-        VirtualMouseServer serverOne = CreateServer(options);
+        await using VirtualMouseServer serverOne = CreateServer(options);
         Task serverOneTask = serverOne.RunAsync(serverOneStop.Token);
 
         await using VirtualMouseClient client = CreateClient(options);
@@ -56,7 +56,7 @@ public sealed class ServerClientTests
         await StopServerAsync(serverOneStop, serverOneTask).ConfigureAwait(false);
 
         using CancellationTokenSource serverTwoStop = new();
-        VirtualMouseServer serverTwo = CreateServer(options);
+        await using VirtualMouseServer serverTwo = CreateServer(options);
         Task serverTwoTask = serverTwo.RunAsync(serverTwoStop.Token);
 
         await WaitUntilAsync(() => serverTwo.Clients.Count == 1).ConfigureAwait(false);
@@ -73,7 +73,7 @@ public sealed class ServerClientTests
     {
         HostingSettings options = CreateOptions();
         using CancellationTokenSource serverStop = new();
-        VirtualMouseServer server = CreateServer(options);
+        await using VirtualMouseServer server = CreateServer(options);
         Task serverTask = server.RunAsync(serverStop.Token);
 
         await using VirtualMouseClient client = CreateClient(options);
@@ -91,7 +91,7 @@ public sealed class ServerClientTests
     {
         HostingSettings options = CreateOptions();
         using CancellationTokenSource serverStop = new();
-        VirtualMouseServer server = CreateServer(options);
+        await using VirtualMouseServer server = CreateServer(options);
         Task serverTask = server.RunAsync(serverStop.Token);
 
         await using VirtualMouseClient client = CreateClient(options);
@@ -109,7 +109,7 @@ public sealed class ServerClientTests
     {
         HostingSettings options = CreateOptions();
         using CancellationTokenSource serverStop = new();
-        VirtualMouseServer server = CreateServer(options);
+        await using VirtualMouseServer server = CreateServer(options);
         Task serverTask = server.RunAsync(serverStop.Token);
 
         await using VirtualMouseClient client = CreateClient(options);
