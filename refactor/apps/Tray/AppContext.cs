@@ -43,7 +43,7 @@ internal sealed class AppContext : IDisposable
 
         _refreshTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromSeconds(1),
+            Interval = TimeSpan.FromMilliseconds(500),
         };
         _refreshTimer.Tick += RefreshStatusAsync;
     }

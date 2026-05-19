@@ -9,7 +9,7 @@ namespace VirtualMouse.Inputs.Sdl;
 /// <summary>Runs one SDL event loop for a group of controller sources.</summary>
 public static class SdlGamepadEventLoop
 {
-    private const int EventWaitTimeoutMilliseconds = 50;
+    private const int EventWaitTimeoutMilliseconds = 100;
 
     /// <summary>Runs the sources until cancellation.</summary>
     public static void Run(

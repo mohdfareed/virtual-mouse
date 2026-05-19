@@ -13,7 +13,7 @@ namespace VirtualMouse.Hosting;
 
 internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
 {
-    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1);
 
     private readonly CancellationTokenSource _stop = new();
     private readonly Lock _sourcesGate = new();
