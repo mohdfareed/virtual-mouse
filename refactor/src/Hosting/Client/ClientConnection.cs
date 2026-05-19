@@ -4,16 +4,18 @@ using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using StreamJsonRpc;
-using VirtualMouse.Settings;
 
 namespace VirtualMouse.Hosting;
 
 internal sealed class ClientConnection(
-    IOptions<HostingSettings> options,
     ILogger<ClientConnection> logger) : IDisposable, IAsyncDisposable
 {
+    private const string PipeName = "VirtualMouse.Refactor";
+
+    private static readonly TimeSpan KeepAliveDelay = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(1);
+
     private readonly SemaphoreSlim _gate = new(1, 1);
     private NamedPipeClientStream? _pipe;
     private IHostServerApi? _server;
@@ -52,7 +54,7 @@ internal sealed class ClientConnection(
         while (!cancellationToken.IsCancellationRequested)
         {
             await Task
-                .Delay(TimeSpan.FromMilliseconds(options.Value.KeepAliveMilliseconds), cancellationToken)
+                .Delay(KeepAliveDelay, cancellationToken)
                 .ConfigureAwait(false);
 
             try
@@ -108,7 +110,7 @@ internal sealed class ClientConnection(
 
     private async Task OpenAsync(CancellationToken cancellationToken)
     {
-        string pipeName = options.Value.PipeName;
+        string pipeName = PipeName;
         SetState(ClientConnectionState.Connecting, null);
         HostingLog.ConnectingToServerPipe(logger, pipeName);
 
@@ -150,7 +152,7 @@ internal sealed class ClientConnection(
                 HostingLog.ReconnectFailed(logger, exception.Message);
                 await ClearAsync().ConfigureAwait(false);
                 await Task
-                    .Delay(TimeSpan.FromMilliseconds(options.Value.ReconnectDelayMilliseconds), cancellationToken)
+                    .Delay(ReconnectDelay, cancellationToken)
                     .ConfigureAwait(false);
             }
         }

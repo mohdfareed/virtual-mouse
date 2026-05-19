@@ -24,13 +24,14 @@ internal static class AppSetup
         VirtualMouseSettings settings = new();
         builder.Configuration.GetSection(VirtualMouseSettings.SectionName).Bind(settings);
         _ = builder.Logging.ClearProviders();
+        _ = builder.Logging.SetMinimumLevel(settings.Logging.Level);
         _ = builder.Logging.AddApplicationFileLogger(
-            ResolveLogFilePath(settingsPath, settings.Logging.LogFile));
+            ResolveLogDirectory(settingsPath, settings.Logging.LogDirectory));
 
         return builder.Build();
     }
 
-    private static string? ResolveLogFilePath(string settingsPath, string? path)
+    private static string? ResolveLogDirectory(string settingsPath, string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {

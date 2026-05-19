@@ -21,19 +21,23 @@ public sealed class FileLoggingTests
     {
         string directory = Path.Combine(Path.GetTempPath(), "VirtualMouse.Refactor.Tests", Guid.NewGuid().ToString("N"));
         _ = Directory.CreateDirectory(directory);
-        string logPath = Path.Combine(directory, "app.log");
+        string logDirectory = Path.Combine(directory, "logs");
 
         try
         {
             using ILoggerFactory factory = LoggerFactory.Create(logging =>
             {
-                _ = logging.AddApplicationFileLogger(logPath);
+                _ = logging.AddApplicationFileLogger(logDirectory);
             });
 
             ILogger logger = factory.CreateLogger("tests");
             LogSmokeTest(logger, null);
 
-            string text = File.ReadAllText(logPath);
+            string runLogPath = FileLoggingExtensions.ResolveRunLogFilePath(logDirectory);
+            Assert.IsTrue(File.Exists(runLogPath));
+            Assert.IsFalse(File.Exists(Path.Combine(logDirectory, "app.log")));
+
+            string text = File.ReadAllText(runLogPath);
             StringAssert.Contains(text, "file logger smoke test", StringComparison.Ordinal);
             StringAssert.Contains(text, "tests", StringComparison.Ordinal);
         }

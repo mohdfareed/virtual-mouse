@@ -32,8 +32,6 @@ public sealed class SettingsValidationTests
             InvalidOperationException exception = Assert.ThrowsExactly<InvalidOperationException>(
                 services.GetRequiredService<ApplicationSettingsService>);
 
-            StringAssert.Contains(exception.Message, "hosting:pipeName", StringComparison.Ordinal);
-            StringAssert.Contains(exception.Message, "hosting:foregroundPollMilliseconds", StringComparison.Ordinal);
             StringAssert.Contains(exception.Message, "viiper:port", StringComparison.Ordinal);
             StringAssert.Contains(exception.Message, "games:bad:receiverProcesses", StringComparison.Ordinal);
         }
@@ -138,12 +136,6 @@ public sealed class SettingsValidationTests
         return """
         {
           "VirtualMouse": {
-            "Hosting": {
-              "PipeName": "",
-              "ReconnectDelayMilliseconds": 0,
-              "KeepAliveMilliseconds": 0,
-              "ForegroundPollMilliseconds": 0
-            },
             "Viiper": {
               "Host": "localhost",
               "Port": 70000

@@ -37,9 +37,6 @@ public sealed record SteamGame
     public string? LocalPath { get; init; }
 }
 
-// MARK: Publics
-// ============================================================================
-
 /// <summary>Reads local Steam state and controls Steam Input through Steam URLs.</summary>
 /// <param name="openUrl">Steam URL opener. Defaults to the OS URL handler.</param>
 public sealed class SteamInputClient(Func<Uri, CancellationToken, ValueTask>? openUrl = null)
@@ -48,6 +45,9 @@ public sealed class SteamInputClient(Func<Uri, CancellationToken, ValueTask>? op
     public const uint DesktopConfigAppId = 413080;
 
     private readonly Func<Uri, CancellationToken, ValueTask> _openUrl = openUrl ?? OpenSteamUrlAsync;
+
+    // MARK: Publics
+    // ========================================================================
 
     /// <summary>Lists Steam and non-Steam games known locally.</summary>
     /// <param name="steamPath">Steam install path. When omitted, the local install is discovered.</param>

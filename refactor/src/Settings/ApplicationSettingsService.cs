@@ -26,8 +26,6 @@ public static class SettingsServices
         _ = services.AddSingleton<ApplicationSettingsService>();
         _ = services.Configure<VirtualMouseSettings>(
             configuration.GetSection(VirtualMouseSettings.SectionName));
-        _ = services.Configure<HostingSettings>(
-            configuration.GetSection(HostingSettings.SectionName));
         _ = services.Configure<LoggingSettings>(
             configuration.GetSection(LoggingSettings.SectionName));
         _ = services.Configure<ViiperSettings>(

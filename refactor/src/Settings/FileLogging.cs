@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Threading;
@@ -13,20 +14,32 @@ namespace VirtualMouse.Settings;
 /// <summary>File logging registration for application composition.</summary>
 public static class FileLoggingExtensions
 {
-    /// <summary>Adds file logging when a log file path is configured.</summary>
+    /// <summary>Adds file logging when a log directory is configured.</summary>
     public static ILoggingBuilder AddApplicationFileLogger(
         this ILoggingBuilder logging,
-        string? logFile)
+        string? logDirectory)
     {
         ArgumentNullException.ThrowIfNull(logging);
 
-        if (string.IsNullOrWhiteSpace(logFile))
+        if (string.IsNullOrWhiteSpace(logDirectory))
         {
             return logging;
         }
 
-        _ = logging.Services.AddSingleton<ILoggerProvider>(_ => new FileLoggerProvider(logFile));
+        _ = logging.Services.AddSingleton<ILoggerProvider>(_ =>
+            new FileLoggerProvider(ResolveRunLogFilePath(logDirectory)));
         return logging;
+    }
+
+    /// <summary>Gets the per-process log path for a configured log directory.</summary>
+    public static string ResolveRunLogFilePath(string logDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(logDirectory);
+
+        string directory = Path.GetFullPath(logDirectory);
+        string start = Process.GetCurrentProcess().StartTime.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        string fileName = $"app-{start}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}.log";
+        return Path.Combine(directory, fileName);
     }
 }
 

@@ -42,7 +42,6 @@ public static class ServerServices
         {
             ViiperOutputFactory viiper = services.GetRequiredService<ViiperOutputFactory>();
             return new ServerService(
-                services.GetRequiredService<IOptions<HostingSettings>>(),
                 services.GetRequiredService<ILogger<ServerService>>(),
                 services.GetService<SettingsFile>(),
                 services.GetService<ProfilesService>(),

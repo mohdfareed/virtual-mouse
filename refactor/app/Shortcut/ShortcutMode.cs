@@ -2,6 +2,7 @@ using System.IO;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using VirtualMouse.Hosting;
 using VirtualMouse.Settings;
 using VirtualMouse.Settings.Profiles;
@@ -63,13 +64,14 @@ internal static class ShortcutMode
 
         VirtualMouseSettings settings = new();
         builder.Configuration.GetSection(VirtualMouseSettings.SectionName).Bind(settings);
+        _ = builder.Logging.SetMinimumLevel(settings.Logging.Level);
         _ = builder.Logging.AddApplicationFileLogger(
-            ResolveLogFilePath(settingsPath, settings.Logging.LogFile));
+            ResolveLogDirectory(settingsPath, settings.Logging.LogDirectory));
 
         return builder.Build();
     }
 
-    private static string? ResolveLogFilePath(string settingsPath, string? path)
+    private static string? ResolveLogDirectory(string settingsPath, string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {

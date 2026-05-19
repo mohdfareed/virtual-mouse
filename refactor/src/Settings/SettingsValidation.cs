@@ -12,36 +12,12 @@ internal static class SettingsValidation
         ArgumentNullException.ThrowIfNull(settings);
 
         List<string> failures = [];
-        ValidateHosting(settings.Hosting, failures);
         ValidateViiper(settings.Viiper, failures);
         ValidateProfiles(settings.Games, failures);
 
         if (failures.Count > 0)
         {
             throw new InvalidOperationException(string.Join(Environment.NewLine, failures));
-        }
-    }
-
-    private static void ValidateHosting(HostingSettings settings, List<string> failures)
-    {
-        if (string.IsNullOrWhiteSpace(settings.PipeName))
-        {
-            failures.Add("hosting:pipeName is required.");
-        }
-
-        if (settings.ReconnectDelayMilliseconds <= 0)
-        {
-            failures.Add("hosting:reconnectDelayMilliseconds must be greater than zero.");
-        }
-
-        if (settings.KeepAliveMilliseconds <= 0)
-        {
-            failures.Add("hosting:keepAliveMilliseconds must be greater than zero.");
-        }
-
-        if (settings.ForegroundPollMilliseconds <= 0)
-        {
-            failures.Add("hosting:foregroundPollMilliseconds must be greater than zero.");
         }
     }
 

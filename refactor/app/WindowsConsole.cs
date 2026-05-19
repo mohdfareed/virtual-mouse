@@ -12,6 +12,11 @@ internal static class WindowsConsole
 
     public static void AttachForCli()
     {
+        if (Environment.GetEnvironmentVariable("VIRTUALMOUSE_NO_CONSOLE_ATTACH") == "1")
+        {
+            return;
+        }
+
         if (!AttachConsole(AttachParentProcess))
         {
             return;

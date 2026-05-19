@@ -6,7 +6,6 @@ using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using VirtualMouse.Forwarding;
 using VirtualMouse.Runtime;
 using VirtualMouse.Settings;
@@ -18,12 +17,16 @@ namespace VirtualMouse.Hosting;
 /// <summary>Long-lived local server for client connections.</summary>
 public sealed class ServerService : IAsyncDisposable
 {
-    private readonly IOptions<HostingSettings> _options;
+    private const string PipeName = "VirtualMouse.Refactor";
+
     private readonly ILogger<ServerService> _logger;
     private readonly SettingsFile? _settingsFile;
     private readonly ConcurrentDictionary<ServerConnectionHandle, byte> _connections = [];
     private readonly ServerSessions _sessions;
     private readonly ServerActiveClientLoop _activeClients;
+    private readonly ControllerBroker _controllerBroker;
+    private readonly MouseBroker _mouseBroker;
+    private readonly ControllerPipeSessions _controllerPipes;
     private readonly PhysicalControllerPump _physicalControllers;
     private readonly MouseInputPump _mouseInput;
     private readonly Func<CancellationToken, Task> _startupCleanup;
@@ -31,12 +34,9 @@ public sealed class ServerService : IAsyncDisposable
     // MARK: Construction
     // ========================================================================
 
-    /// <summary>Creates a server from configured hosting settings.</summary>
-    public ServerService(
-        IOptions<HostingSettings> options,
-        ILogger<ServerService> logger)
+    /// <summary>Creates a server.</summary>
+    public ServerService(ILogger<ServerService> logger)
         : this(
-            options ?? throw new ArgumentNullException(nameof(options)),
             logger,
             settingsFile: null,
             profiles: null,
@@ -46,7 +46,6 @@ public sealed class ServerService : IAsyncDisposable
     }
 
     internal ServerService(
-        IOptions<HostingSettings> options,
         ILogger<ServerService> logger,
         SettingsFile? settingsFile,
         ProfilesService? profiles,
@@ -56,51 +55,35 @@ public sealed class ServerService : IAsyncDisposable
         MouseBroker? mouseForwarding = null,
         Func<CancellationToken, Task>? startupCleanup = null)
     {
-        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
 
-        _options = options;
         _logger = logger;
         _settingsFile = settingsFile;
         _startupCleanup = startupCleanup ?? (static _ => Task.CompletedTask);
+        _controllerBroker = forwarding ?? new ControllerBroker(new NoopControllerOutputFactory());
+        _mouseBroker = mouseForwarding ?? new MouseBroker(new NoopMouseOutputFactory());
+        _controllerPipes = new ControllerPipeSessions(_controllerBroker, logger);
 
         ActiveClientRegistry activeRuntime = runtime ?? new ActiveClientRegistry();
-        ControllerBroker? broker = forwarding ?? new ControllerBroker(new NoopControllerOutputFactory());
-        MouseBroker? mouseBroker = mouseForwarding ?? new MouseBroker(new NoopMouseOutputFactory());
-        ControllerPipeSessions? controllerPipes = new(broker, logger);
-        try
-        {
-            _physicalControllers = new PhysicalControllerPump(broker, logger);
-            _mouseInput = new MouseInputPump(mouseBroker, logger);
-            _activeClients = activeClients ?? ServerActiveClientLoop.CreateDefault(
-                activeRuntime,
-                options.Value,
-                logger,
-                broker,
-                mouseBroker);
+        _physicalControllers = new PhysicalControllerPump(_controllerBroker, logger);
+        _mouseInput = new MouseInputPump(_mouseBroker, logger);
+        _activeClients = activeClients ?? ServerActiveClientLoop.CreateDefault(
+            activeRuntime,
+            logger,
+            _controllerBroker,
+            _mouseBroker);
 
-            _sessions = new ServerSessions(
-                logger,
-                profiles,
-                activeRuntime,
-                broker,
-                mouseBroker,
-                controllerPipes,
-                () => new ServerInputStatus(
-                    _physicalControllers.GetStatus(),
-                    _mouseInput.GetStatus()),
-                () => _activeClients.GetSteamInputStatus());
-
-            broker = null;
-            mouseBroker = null;
-            controllerPipes = null;
-        }
-        finally
-        {
-            controllerPipes?.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            broker?.Dispose();
-            mouseBroker?.Dispose();
-        }
+        _sessions = new ServerSessions(
+            logger,
+            profiles,
+            activeRuntime,
+            _controllerBroker,
+            _mouseBroker,
+            _controllerPipes,
+            () => new ServerInputStatus(
+                _physicalControllers.GetStatus(),
+                _mouseInput.GetStatus()),
+            () => _activeClients.GetSteamInputStatus());
     }
 
     internal IReadOnlyCollection<ConnectedClient> Clients => _sessions.Clients;
@@ -115,7 +98,7 @@ public sealed class ServerService : IAsyncDisposable
         Justification = "Accepted pipe ownership transfers to a tracked connection handle.")]
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        string pipeName = _options.Value.PipeName;
+        string pipeName = PipeName;
         HostingLog.ListeningOnServerPipe(_logger, pipeName);
 
         if (_settingsFile is not null)
@@ -172,7 +155,7 @@ public sealed class ServerService : IAsyncDisposable
             await _physicalControllers.DisposeAsync().ConfigureAwait(false);
             await _mouseInput.DisposeAsync().ConfigureAwait(false);
             await DisposeConnectionsAsync().ConfigureAwait(false);
-            await _sessions.DisposeAsync().ConfigureAwait(false);
+            await DisposeForwardingAsync().ConfigureAwait(false);
         }
     }
 
@@ -188,7 +171,7 @@ public sealed class ServerService : IAsyncDisposable
         await _physicalControllers.DisposeAsync().ConfigureAwait(false);
         await _mouseInput.DisposeAsync().ConfigureAwait(false);
         await DisposeConnectionsAsync().ConfigureAwait(false);
-        await _sessions.DisposeAsync().ConfigureAwait(false);
+        await DisposeForwardingAsync().ConfigureAwait(false);
     }
 
     // MARK: Privates
@@ -202,6 +185,13 @@ public sealed class ServerService : IAsyncDisposable
             _ = _connections.TryRemove(connection, out _);
             await connection.DisposeAsync().ConfigureAwait(false);
         }
+    }
+
+    private async Task DisposeForwardingAsync()
+    {
+        await _controllerPipes.DisposeAsync().ConfigureAwait(false);
+        await _controllerBroker.DisposeAsync().ConfigureAwait(false);
+        await _mouseBroker.DisposeAsync().ConfigureAwait(false);
     }
 
     private void TrackConnection(ServerConnectionHandle connection)

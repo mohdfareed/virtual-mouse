@@ -24,7 +24,8 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
             SingleReader = true,
             SingleWriter = false,
         });
-    private IReadOnlyList<SdlGamepadSource> _sources = [];
+    private IReadOnlyList<ClientControllerSource> _sources = [];
+    private ushort _nextControllerIndex;
     private NamedPipeClientStream? _pipe;
     private ControllerPipeWriter? _writer;
     private Task? _inputTask;
@@ -82,7 +83,7 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
                 }
 
                 SdlGamepadEventLoop.Run(
-                    GetSourcesSnapshot,
+                    GetGamepadSourcesSnapshot,
                     SendInput,
                     source => RemoveSource(client, source),
                     () => RefreshSources(client),
@@ -110,11 +111,11 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
         while (!_stop.IsCancellationRequested)
         {
             ControllerPipeMessage message = await reader.ReadAsync(_stop.Token).ConfigureAwait(false);
-            IReadOnlyList<SdlGamepadSource> sources = GetSourcesSnapshot();
+            IReadOnlyList<ClientControllerSource> sources = GetSourcesSnapshot();
             if (message.Type == ControllerPipeFrameType.Feedback &&
-                message.Feedback.ControllerIndex < sources.Count)
+                TryGetSource(message.Feedback.ControllerIndex, sources, out SdlGamepadSource? source))
             {
-                _ = sources[message.Feedback.ControllerIndex].TrySendFeedback(message.Feedback.Feedback);
+                _ = source.TrySendFeedback(message.Feedback.Feedback);
             }
         }
     }
@@ -146,19 +147,20 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
     }
 
     private static ClientControllerInfo[] CreateControllerInfos(
-        IReadOnlyList<SdlGamepadSource> sources,
+        IReadOnlyList<ClientControllerSource> sources,
         Dictionary<SdlGamepadSource, ControllerSlotIdentity> identities)
     {
         ClientControllerInfo[] controllers = new ClientControllerInfo[sources.Count];
         for (int i = 0; i < sources.Count; i++)
         {
-            SdlGamepadSource source = sources[i];
-            ControllerSlotIdentity identity = identities[source];
+            ClientControllerSource source = sources[i];
+            SdlGamepadSource gamepad = source.Source;
+            ControllerSlotIdentity identity = identities[gamepad];
             controllers[i] = new ClientControllerInfo(
-                checked((ushort)i),
+                source.ControllerIndex,
                 identity.PhysicalId,
                 identity.Label,
-                source.Features);
+                gamepad.Features);
         }
 
         return controllers;
@@ -221,18 +223,18 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
     }
 
     private static Dictionary<SdlGamepadSource, ControllerSlotIdentity> CreateSlotIdentities(
-        IReadOnlyList<SdlGamepadSource> sources,
+        IReadOnlyList<ClientControllerSource> sources,
         IReadOnlyList<SdlControllerInfo> physicalControllers)
     {
         Dictionary<SdlGamepadSource, ControllerSlotIdentity> identities = [];
-        foreach (SdlGamepadSource source in sources)
+        foreach (ClientControllerSource source in sources)
         {
-            SdlControllerInfo controller = source.Controller;
+            SdlControllerInfo controller = source.Source.Controller;
             SdlControllerInfo? physical = SdlControllerMatcher.FindPhysicalController(
                 controller,
                 physicalControllers);
             SdlControllerInfo slot = physical ?? controller;
-            identities[source] = new ControllerSlotIdentity(
+            identities[source.Source] = new ControllerSlotIdentity(
                 SdlControllerCatalog.GetPhysicalControllerId(slot),
                 slot.Name);
         }
@@ -257,12 +259,12 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
 
     private ushort FindSourceIndex(SdlGamepadSource source)
     {
-        IReadOnlyList<SdlGamepadSource> sources = GetSourcesSnapshot();
+        IReadOnlyList<ClientControllerSource> sources = GetSourcesSnapshot();
         for (int i = 0; i < sources.Count; i++)
         {
-            if (ReferenceEquals(sources[i], source))
+            if (ReferenceEquals(sources[i].Source, source))
             {
-                return checked((ushort)i);
+                return sources[i].ControllerIndex;
             }
         }
 
@@ -299,13 +301,13 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
         IReadOnlyList<SdlGamepadSource> openedSources = OpenSources(missingControllers);
         try
         {
-            IReadOnlyList<SdlGamepadSource> sources = AddSources(openedSources);
+            IReadOnlyList<ClientControllerSource> sources = AddSources(openedSources);
             Dictionary<SdlGamepadSource, ControllerSlotIdentity> identities =
                 CreateSlotIdentities(sources, physicalControllers);
             ClientControllerInfo[] controllers = CreateControllerInfos(sources, identities);
 
             await client.RegisterClientControllersAsync(controllers, cancellationToken).ConfigureAwait(false);
-            return sources;
+            return GetGamepadSourcesSnapshot();
         }
         catch
         {
@@ -320,28 +322,30 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
 
     private async Task DisposeSourcesAsync()
     {
-        IReadOnlyList<SdlGamepadSource> sources;
+        IReadOnlyList<ClientControllerSource> sources;
         lock (_sourcesGate)
         {
             sources = _sources;
             _sources = [];
         }
 
-        foreach (SdlGamepadSource source in sources)
+        foreach (ClientControllerSource source in sources)
         {
-            await source.DisposeAsync().ConfigureAwait(false);
+            await source.Source.DisposeAsync().ConfigureAwait(false);
         }
     }
 
     private void RemoveSource(ClientService client, SdlGamepadSource source)
     {
-        SdlGamepadSource? removed = null;
+        ClientControllerSource? removed = null;
         lock (_sourcesGate)
         {
-            List<SdlGamepadSource> sources = [.. _sources];
-            if (sources.Remove(source))
+            List<ClientControllerSource> sources = [.. _sources];
+            int index = sources.FindIndex(entry => ReferenceEquals(entry.Source, source));
+            if (index >= 0)
             {
-                removed = source;
+                removed = sources[index];
+                sources.RemoveAt(index);
                 _sources = sources;
             }
         }
@@ -351,7 +355,7 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
             return;
         }
 
-        removed.Dispose();
+        removed.Source.Dispose();
         RefreshControllerRegistration(client);
     }
 
@@ -362,7 +366,7 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
 
     private void RefreshControllerRegistration(ClientService client)
     {
-        IReadOnlyList<SdlGamepadSource> sources = GetSourcesSnapshot();
+        IReadOnlyList<ClientControllerSource> sources = GetSourcesSnapshot();
         ClientControllerInfo[] controllers = CreateControllerInfos(
             sources,
             CreateSlotIdentities(sources, GetPhysicalControllers(SdlControllerCatalog.GetControllers(
@@ -370,7 +374,7 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
         client.RegisterClientControllersAsync(controllers, _stop.Token).GetAwaiter().GetResult();
     }
 
-    private IReadOnlyList<SdlGamepadSource> AddSources(IReadOnlyList<SdlGamepadSource> sources)
+    private IReadOnlyList<ClientControllerSource> AddSources(IReadOnlyList<SdlGamepadSource> sources)
     {
         if (sources.Count == 0)
         {
@@ -379,29 +383,65 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
 
         lock (_sourcesGate)
         {
-            _sources = [.. _sources, .. sources];
+            List<ClientControllerSource> entries = [.. _sources];
+            foreach (SdlGamepadSource source in sources)
+            {
+                entries.Add(new ClientControllerSource(_nextControllerIndex++, source));
+            }
+
+            _sources = entries;
             return _sources;
         }
     }
 
     private HashSet<SdlControllerId> GetOpenSourceIds()
     {
-        IReadOnlyList<SdlGamepadSource> sources = GetSourcesSnapshot();
+        IReadOnlyList<ClientControllerSource> sources = GetSourcesSnapshot();
         HashSet<SdlControllerId> ids = [];
-        foreach (SdlGamepadSource source in sources)
+        foreach (ClientControllerSource source in sources)
         {
-            _ = ids.Add(source.Controller.Id);
+            _ = ids.Add(source.Source.Controller.Id);
         }
 
         return ids;
     }
 
-    private IReadOnlyList<SdlGamepadSource> GetSourcesSnapshot()
+    private IReadOnlyList<SdlGamepadSource> GetGamepadSourcesSnapshot()
+    {
+        IReadOnlyList<ClientControllerSource> sources = GetSourcesSnapshot();
+        SdlGamepadSource[] gamepads = new SdlGamepadSource[sources.Count];
+        for (int i = 0; i < sources.Count; i++)
+        {
+            gamepads[i] = sources[i].Source;
+        }
+
+        return gamepads;
+    }
+
+    private IReadOnlyList<ClientControllerSource> GetSourcesSnapshot()
     {
         lock (_sourcesGate)
         {
             return _sources;
         }
+    }
+
+    private static bool TryGetSource(
+        ushort controllerIndex,
+        IReadOnlyList<ClientControllerSource> sources,
+        out SdlGamepadSource source)
+    {
+        foreach (ClientControllerSource entry in sources)
+        {
+            if (entry.ControllerIndex == controllerIndex)
+            {
+                source = entry.Source;
+                return true;
+            }
+        }
+
+        source = null!;
+        return false;
     }
 
     private static async Task IgnoreExpectedStopAsync(Task? task)
@@ -425,6 +465,8 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
     {
         return exception.Message.Contains("mapping", StringComparison.OrdinalIgnoreCase);
     }
+
+    private sealed record ClientControllerSource(ushort ControllerIndex, SdlGamepadSource Source);
 
     private sealed record ControllerSlotIdentity(string PhysicalId, string Label);
 }

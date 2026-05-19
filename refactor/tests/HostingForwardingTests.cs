@@ -8,7 +8,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using VirtualMouse.Forwarding;
 using VirtualMouse.Hosting;
 using VirtualMouse.Runtime;
@@ -34,12 +33,6 @@ public sealed class HostingForwardingTests
         try
         {
             using ServiceProvider services = CreateServices(settingsPath);
-            HostingSettings options = new()
-            {
-                PipeName = "VirtualMouse.Refactor.Tests." + Guid.NewGuid().ToString("N"),
-                ForegroundPollMilliseconds = 5,
-            };
-
             ActiveClientRegistry runtime = new();
             FakeControllerOutputFactory factory = new();
             await using ControllerBroker broker = new(factory);
@@ -48,11 +41,10 @@ public sealed class HostingForwardingTests
             ServerActiveClientLoop activeClients = new(
                 runtime,
                 () => Volatile.Read(ref foregroundProcessId),
-                TimeSpan.FromMilliseconds(options.ForegroundPollMilliseconds),
+                TimeSpan.FromMilliseconds(5),
                 args => broker.SetActiveClient(args.CurrentClientId));
 
             await using ServerService server = new(
-                Options.Create(options),
                 NullLogger<ServerService>.Instance,
                 settingsFile: null,
                 services.GetRequiredService<ProfilesService>(),
@@ -62,9 +54,7 @@ public sealed class HostingForwardingTests
 
             using CancellationTokenSource serverStop = new();
             Task serverTask = server.RunAsync(serverStop.Token);
-            await using ClientService client = new(
-                Options.Create(options),
-                NullLoggerFactory.Instance);
+            await using ClientService client = new(NullLoggerFactory.Instance);
 
             try
             {

@@ -23,10 +23,9 @@ internal sealed class ServerSessions(
     MouseBroker mouseForwarding,
     ControllerPipeSessions controllerPipes,
     Func<ServerInputStatus>? getInputStatus = null,
-    Func<ServerSteamInputStatus>? getSteamInputStatus = null) : IAsyncDisposable
+    Func<ServerSteamInputStatus>? getSteamInputStatus = null)
 {
     private readonly ConcurrentDictionary<Guid, ConnectedClient> _clients = [];
-    private bool _disposed;
 
     internal IReadOnlyCollection<ConnectedClient> Clients => [.. _clients.Values];
 
@@ -138,19 +137,6 @@ internal sealed class ServerSessions(
         {
             HostingLog.ClientPipeClosed(logger, exception.Message);
         }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-        await controllerPipes.DisposeAsync().ConfigureAwait(false);
-        await forwarding.DisposeAsync().ConfigureAwait(false);
-        await mouseForwarding.DisposeAsync().ConfigureAwait(false);
     }
 
     private ConnectedClient GetClient(Guid clientId)

@@ -3,10 +3,9 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using VirtualMouse.Hosting;
 using VirtualMouse.Runtime;
-using VirtualMouse.Settings;
+using VirtualMouse.Steam;
 
 namespace VirtualMouse.Tests;
 
@@ -14,6 +13,15 @@ namespace VirtualMouse.Tests;
 [TestClass]
 public sealed class ServerActiveClientLoopTests
 {
+    private static readonly string[] ExpectedSteamForceUrls =
+    [
+        "steam://forceinputappid/0",
+        "steam://forceinputappid/111",
+        "steam://forceinputappid/0",
+        "steam://forceinputappid/222",
+        "steam://forceinputappid/0",
+    ];
+
     /// <summary>Checks foreground pid updates active-client state and fan-out events.</summary>
     [TestMethod]
     public async Task ForegroundPidUpdatesActiveClientState()
@@ -65,22 +73,15 @@ public sealed class ServerActiveClientLoopTests
     [TestMethod]
     public async Task ServerRunStartsActiveClientLoop()
     {
-        HostingSettings options = new()
-        {
-            PipeName = "VirtualMouse.Refactor.Tests." + Guid.NewGuid().ToString("N"),
-            ForegroundPollMilliseconds = 5,
-        };
-
         ActiveClientRegistry runtime = new();
         int foregroundProcessId = 0;
         ServerActiveClientLoop activeClients = new(
             runtime,
             () => Volatile.Read(ref foregroundProcessId),
-            TimeSpan.FromMilliseconds(options.ForegroundPollMilliseconds),
+            TimeSpan.FromMilliseconds(5),
             static _ => { });
 
         await using ServerService server = new(
-            Options.Create(options),
             NullLogger<ServerService>.Instance,
             settingsFile: null,
             profiles: null,
@@ -96,6 +97,61 @@ public sealed class ServerActiveClientLoopTests
 
             await WaitUntilAsync(() => runtime.GetStatus().ForegroundProcessId == 321)
                 .ConfigureAwait(false);
+        }
+        finally
+        {
+            await stop.CancelAsync().ConfigureAwait(false);
+            await IgnoreCancellationAsync(task).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Steam Input forcing clears the previous app before forcing the active client.</summary>
+    [TestMethod]
+    public async Task ActiveClientChangeClearsThenForcesSteamInput()
+    {
+        ActiveClientRegistry runtime = new();
+        Guid first = Guid.NewGuid();
+        Guid second = Guid.NewGuid();
+        runtime.RegisterClient(first, Environment.ProcessId, "first", steamAppId: 111, ["first.exe"]);
+        runtime.RegisterClient(second, Environment.ProcessId, "second", steamAppId: 222, ["second.exe"]);
+        runtime.UpdateClient(first, [new ObservedGameProcess(1111, "first.exe")]);
+        runtime.UpdateClient(second, [new ObservedGameProcess(2222, "second.exe")]);
+
+        int foregroundProcessId = 0;
+        List<string> urls = [];
+        SteamInputClient steam = new((url, _) =>
+        {
+            urls.Add(url.AbsoluteUri);
+            return ValueTask.CompletedTask;
+        });
+        ServerActiveClientLoop activeClients = new(
+            runtime,
+            () => Volatile.Read(ref foregroundProcessId),
+            TimeSpan.FromMilliseconds(5),
+            activeClientChanged: null,
+            NullLogger.Instance,
+            steam);
+
+        using CancellationTokenSource stop = new();
+        Task task = activeClients.RunAsync(stop.Token);
+
+        try
+        {
+            Volatile.Write(ref foregroundProcessId, 1111);
+            await WaitUntilAsync(() => urls.Count >= 2).ConfigureAwait(false);
+
+            Volatile.Write(ref foregroundProcessId, 2222);
+            await WaitUntilAsync(() => urls.Count >= 4).ConfigureAwait(false);
+
+            Volatile.Write(ref foregroundProcessId, 0);
+            await WaitUntilAsync(() => urls.Count >= 5).ConfigureAwait(false);
+
+            CollectionAssert.AreEqual(ExpectedSteamForceUrls, urls);
+
+            ServerSteamInputStatus status = activeClients.GetSteamInputStatus();
+            Assert.IsFalse(status.Forced);
+            Assert.IsNull(status.AppId);
+            Assert.IsNull(status.LastError);
         }
         finally
         {

@@ -3,9 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using VirtualMouse.Runtime;
-using VirtualMouse.Settings;
 
 namespace VirtualMouse.Hosting;
 
@@ -45,14 +43,11 @@ public sealed class ClientService : IDisposable, IAsyncDisposable
     // MARK: Construction
     // ========================================================================
 
-    /// <summary>Creates a client from configured hosting settings.</summary>
-    public ClientService(IOptions<HostingSettings> options, ILoggerFactory loggerFactory)
+    /// <summary>Creates a client.</summary>
+    public ClientService(ILoggerFactory loggerFactory)
     {
         ArgumentNullException.ThrowIfNull(loggerFactory);
-
-        _connection = new ClientConnection(
-            options,
-            loggerFactory.CreateLogger<ClientConnection>());
+        _connection = new ClientConnection(loggerFactory.CreateLogger<ClientConnection>());
         _connection.Changed += OnConnectionChanged;
     }
 

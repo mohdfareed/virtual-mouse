@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using VirtualMouse.Forwarding;
 using VirtualMouse.Runtime;
-using VirtualMouse.Settings;
 using VirtualMouse.Steam;
 
 namespace VirtualMouse.Hosting;
@@ -23,9 +22,10 @@ internal sealed class ServerActiveClientLoop(
     private readonly Lock _steamStatusGate = new();
     private ServerSteamInputStatus _steamStatus = new(false, null, null, null);
 
+    private static readonly TimeSpan ForegroundPollDelay = TimeSpan.FromMilliseconds(100);
+
     public static ServerActiveClientLoop CreateDefault(
         ActiveClientRegistry clients,
-        HostingSettings settings,
         ILogger logger,
         ControllerBroker? forwarding = null,
         MouseBroker? mouseForwarding = null)
@@ -33,7 +33,7 @@ internal sealed class ServerActiveClientLoop(
         return new ServerActiveClientLoop(
             clients,
             GetForegroundProcessId,
-            TimeSpan.FromMilliseconds(settings.ForegroundPollMilliseconds),
+            ForegroundPollDelay,
             activeClientChanged: null,
             logger,
             new SteamInputClient(),

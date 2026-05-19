@@ -3,9 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using VirtualMouse.Hosting;
-using VirtualMouse.Settings;
 
 namespace VirtualMouse.Tests;
 
@@ -17,12 +15,11 @@ public sealed class ServerClientTests
     [TestMethod]
     public async Task ClientConnectRegistersWithServer()
     {
-        HostingSettings options = CreateOptions();
         using CancellationTokenSource serverStop = new();
-        await using ServerService server = CreateServer(options);
+        await using ServerService server = CreateServer();
         Task serverTask = server.RunAsync(serverStop.Token);
 
-        await using ClientService client = CreateClient(options);
+        await using ClientService client = CreateClient();
         await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
 
         await WaitUntilAsync(() => server.Clients.Count == 1).ConfigureAwait(false);
@@ -40,12 +37,11 @@ public sealed class ServerClientTests
     [TestMethod]
     public async Task ClientReconnectsAfterServerRestart()
     {
-        HostingSettings options = CreateOptions();
         using CancellationTokenSource serverOneStop = new();
-        await using ServerService serverOne = CreateServer(options);
+        await using ServerService serverOne = CreateServer();
         Task serverOneTask = serverOne.RunAsync(serverOneStop.Token);
 
-        await using ClientService client = CreateClient(options);
+        await using ClientService client = CreateClient();
         await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
         Guid firstClientId = client.ClientId.GetValueOrDefault();
         await WaitUntilAsync(() => serverOne.Clients.Count == 1).ConfigureAwait(false);
@@ -56,7 +52,7 @@ public sealed class ServerClientTests
         await StopServerAsync(serverOneStop, serverOneTask).ConfigureAwait(false);
 
         using CancellationTokenSource serverTwoStop = new();
-        await using ServerService serverTwo = CreateServer(options);
+        await using ServerService serverTwo = CreateServer();
         Task serverTwoTask = serverTwo.RunAsync(serverTwoStop.Token);
 
         await WaitUntilAsync(() => serverTwo.Clients.Count == 1).ConfigureAwait(false);
@@ -71,12 +67,11 @@ public sealed class ServerClientTests
     [TestMethod]
     public async Task ClientCanReadServerStatus()
     {
-        HostingSettings options = CreateOptions();
         using CancellationTokenSource serverStop = new();
-        await using ServerService server = CreateServer(options);
+        await using ServerService server = CreateServer();
         Task serverTask = server.RunAsync(serverStop.Token);
 
-        await using ClientService client = CreateClient(options);
+        await using ClientService client = CreateClient();
         await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
 
         ServerStatus status = await client.GetStatusAsync(CancellationToken.None).ConfigureAwait(false);
@@ -89,12 +84,11 @@ public sealed class ServerClientTests
     [TestMethod]
     public async Task ServerStopReleasesConnectedClients()
     {
-        HostingSettings options = CreateOptions();
         using CancellationTokenSource serverStop = new();
-        await using ServerService server = CreateServer(options);
+        await using ServerService server = CreateServer();
         Task serverTask = server.RunAsync(serverStop.Token);
 
-        await using ClientService client = CreateClient(options);
+        await using ClientService client = CreateClient();
         await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
         await WaitUntilAsync(() => server.Clients.Count == 1).ConfigureAwait(false);
 
@@ -107,12 +101,11 @@ public sealed class ServerClientTests
     [TestMethod]
     public async Task ClientDisposeIsIdempotent()
     {
-        HostingSettings options = CreateOptions();
         using CancellationTokenSource serverStop = new();
-        await using ServerService server = CreateServer(options);
+        await using ServerService server = CreateServer();
         Task serverTask = server.RunAsync(serverStop.Token);
 
-        await using ClientService client = CreateClient(options);
+        await using ClientService client = CreateClient();
         await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
         await WaitUntilAsync(() => server.Clients.Count == 1).ConfigureAwait(false);
 
@@ -123,26 +116,14 @@ public sealed class ServerClientTests
         await StopServerAsync(serverStop, serverTask).ConfigureAwait(false);
     }
 
-    private static HostingSettings CreateOptions()
+    private static ClientService CreateClient()
     {
-        return new HostingSettings
-        {
-            PipeName = "VirtualMouse.Refactor.Tests." + Guid.NewGuid().ToString("N"),
-            KeepAliveMilliseconds = 25,
-            ReconnectDelayMilliseconds = 25,
-        };
+        return new ClientService(NullLoggerFactory.Instance);
     }
 
-    private static ClientService CreateClient(HostingSettings options)
+    private static ServerService CreateServer()
     {
-        return new ClientService(
-            Options.Create(options),
-            Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
-    }
-
-    private static ServerService CreateServer(HostingSettings options)
-    {
-        return new ServerService(Options.Create(options), NullLogger<ServerService>.Instance);
+        return new ServerService(NullLogger<ServerService>.Instance);
     }
 
     private static async Task StopServerAsync(CancellationTokenSource stop, Task serverTask)

@@ -27,9 +27,12 @@ internal sealed class AppContext : IDisposable
         _app = app;
         _server = app.Services.GetRequiredService<ServerService>();
         string settingsPath = app.Services.GetRequiredService<SettingsFile>().Path;
-        string? logPath = ResolveLogFilePath(
+        string? logDirectory = ResolveLogDirectory(
             settingsPath,
-            app.Services.GetRequiredService<ApplicationSettingsService>().Current.Logging.LogFile);
+            app.Services.GetRequiredService<ApplicationSettingsService>().Current.Logging.LogDirectory);
+        string? logPath = logDirectory is null
+            ? null
+            : FileLoggingExtensions.ResolveRunLogFilePath(logDirectory);
         _menu = new AppMenu(
             settingsPath,
             logPath,
@@ -179,7 +182,7 @@ internal sealed class AppContext : IDisposable
             ToolTipIcon.Error);
     }
 
-    private static string? ResolveLogFilePath(string settingsPath, string? path)
+    private static string? ResolveLogDirectory(string settingsPath, string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {

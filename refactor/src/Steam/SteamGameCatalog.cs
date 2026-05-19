@@ -186,12 +186,11 @@ internal sealed class SteamGameCatalog(string steamPath)
     }
 }
 
+// MARK: Steam Locator
+// ========================================================================
+
 internal static class SteamLocator
 {
-
-    // MARK: Publics
-    // ========================================================================
-
     public static string? FindSteamPath()
     {
         string? steamPath = FirstExistingDirectory(

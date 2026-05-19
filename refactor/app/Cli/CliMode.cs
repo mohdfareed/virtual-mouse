@@ -10,6 +10,7 @@ internal static class CliMode
         root.Subcommands.Add(Commands.CreateServerCommand());
         root.Subcommands.Add(Commands.CreateClientCommand());
         root.Subcommands.Add(SteamCommands.Create());
+        root.Subcommands.Add(TestCommands.Create());
 
         return root.Parse(args).InvokeAsync();
     }

@@ -86,6 +86,7 @@ public sealed class ControllerBrokerTests
 
         broker.SetPhysicalMotionEnabled(true);
         Assert.AreEqual(1, factory.SingleOutput.LastState.Motion?.GyroX);
+        Assert.IsFalse(factory.SingleOutput.Disposed);
     }
 
     /// <summary>Physical disconnect clears fallback state without dropping a client-owned output.</summary>
@@ -109,6 +110,7 @@ public sealed class ControllerBrokerTests
             ControllerFeatures.StandardControls);
 
         Assert.AreEqual(1, factory.SingleOutput.LastState.Motion?.GyroX);
+        FakeControllerOutput output = factory.SingleOutput;
 
         broker.RemovePhysicalController(ControllerId);
 
@@ -119,6 +121,14 @@ public sealed class ControllerBrokerTests
         Assert.IsFalse(status.Slots[0].HasPhysicalEndpoint);
         Assert.IsNull(status.Slots[0].PhysicalFeatures);
         Assert.IsTrue(status.Slots[0].HasActiveSteamEndpoint);
+
+        broker.UpdatePhysicalController(
+            ControllerId,
+            new ControllerState(null, Motion(2), null),
+            ControllerFeatures.Motion);
+
+        Assert.AreSame(output, factory.SingleOutput);
+        Assert.AreEqual(2, factory.SingleOutput.LastState.Motion?.GyroX);
     }
 
     /// <summary>Inactive client input connects output but does not drive reports.</summary>
@@ -256,6 +266,32 @@ public sealed class ControllerBrokerTests
 
         Assert.HasCount(2, feedback.Feedback);
         Assert.AreEqual((ushort)0, feedback.Feedback[1].Rumble?.LowFrequency);
+    }
+
+    /// <summary>Held feedback is stopped when a client controller stream is removed.</summary>
+    [TestMethod]
+    public void FeedbackStopsWhenClientControllerIsRemoved()
+    {
+        Guid clientId = Guid.NewGuid();
+        FakeControllerOutputFactory factory = new();
+        FakeFeedbackSink feedback = new(accept: true);
+        using ControllerBroker broker = new(factory);
+
+        broker.RegisterClient(clientId, ControllerOutput.Xbox360);
+        broker.SetActiveClient(clientId);
+        broker.UpdateClientController(
+            clientId,
+            ControllerId,
+            new ControllerState(Standard(ControllerButtons.South), null, null),
+            ControllerFeatures.StandardControls | ControllerFeatures.Rumble,
+            feedback);
+
+        factory.SingleOutput.EmitFeedback(new ControllerFeedback(new ControllerRumble(10, 20)));
+        broker.RemoveClientControllers(clientId);
+
+        Assert.HasCount(2, feedback.Feedback);
+        Assert.AreEqual((ushort)0, feedback.Feedback[1].Rumble?.LowFrequency);
+        Assert.IsTrue(factory.SingleOutput.Disposed);
     }
 
     /// <summary>Feedback is not sent to endpoints that do not claim the feature.</summary>
