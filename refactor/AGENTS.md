@@ -59,10 +59,12 @@
 - Profiles choose output explicitly with separate `ControllerOutput` and `MouseOutput` values. Do not reintroduce a vague combined output mode.
 - Resolve raw game profile settings through a simple helper, not a DI service. The resolver owns runtime defaults such as title, working directory, receiver process names, and environment-expanded paths.
 - Put app-owned settings under the `VirtualMouse` root in appsettings. Do not use top-level `Logging` for app settings; it is owned by Microsoft.Extensions.Logging provider configuration.
-- Keep `refactor/cli/appsettings.json` as a practical starter config: small,
-  usable, and not just empty defaults. Keep `refactor/cli/appsettings.example.json`
+- Keep `refactor/apps/Cli/appsettings.json` as a practical starter config: small,
+  usable, and not just empty defaults. Keep `refactor/apps/Cli/appsettings.example.json`
   as the compact complete reference with every supported field assigned a
   meaningful value that demonstrates the setting.
+- Keep executable projects organized like `src`: `refactor/apps/Cli/Cli.csproj`,
+  `refactor/apps/Tray/Tray.csproj`, and `refactor/apps/Shortcut/Shortcut.csproj`.
 - File logging is configured from `VirtualMouse:Logging:LogFile` at startup. Do not add reloadable logging until a real workflow needs it.
 - Keep useful smoke checks as repeatable tests under `tests`, and expose them through `script/test.ps1`.
 - Do not add profiles, routes, input devices, output devices, or session orchestration until the communication foundation is stable.
@@ -148,7 +150,9 @@
   status instead of ending the whole server or client run.
 - Keep Steam ROM Manager export in the refactor Steam project; CLI commands only
   orchestrate it from appsettings and print the result.
-- Steam shortcuts should target the no-console `refactor/cli/Shortcut` runner for
+- The default Steam ROM Manager manifest path lives at
+  `VirtualMouse:Steam:SrmExportPath`; CLI export arguments may override it.
+- Steam shortcuts should target the no-console `refactor/apps/Shortcut` runner for
   normal profile launches. Keep the console CLI for diagnostics and explicit
   commands.
 - Keep `SteamInputClient`'s public API narrow: `DesktopConfigAppId`,

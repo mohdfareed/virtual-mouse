@@ -6,7 +6,7 @@ using VirtualMouse.Hosting;
 using VirtualMouse.Settings;
 using VirtualMouse.Settings.Profiles;
 
-namespace Refactor.Cli;
+namespace VirtualMouse.Cli;
 
 internal static class AppSetup
 {

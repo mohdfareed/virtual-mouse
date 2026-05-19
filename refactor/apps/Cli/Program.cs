@@ -1,7 +1,7 @@
 using System.CommandLine;
-using Refactor.Cli;
+using VirtualMouse.Cli;
 
-RootCommand root = new("app refactored");
+RootCommand root = new("Virtual Mouse");
 root.Subcommands.Add(Commands.CreateServerCommand());
 root.Subcommands.Add(Commands.CreateClientCommand());
 root.Subcommands.Add(SteamCommands.Create());

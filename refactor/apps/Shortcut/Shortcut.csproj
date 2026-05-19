@@ -5,7 +5,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <OutputPath>..\bin\$(Configuration)\</OutputPath>
     <NoWarn>$(NoWarn);IDE0130;</NoWarn>
   </PropertyGroup>
 
@@ -21,8 +20,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\appsettings.json" Link="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\appsettings.example.json" Link="appsettings.example.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Cli\appsettings.json" Link="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Cli\appsettings.example.json" Link="appsettings.example.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

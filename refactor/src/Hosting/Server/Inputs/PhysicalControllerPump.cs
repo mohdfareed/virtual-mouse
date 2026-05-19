@@ -233,7 +233,13 @@ internal sealed class PhysicalControllerPump(
         {
             foreach (SdlControllerInfo controller in controllers)
             {
-                sources.Add(SdlGamepadSource.Connect(controller));
+                try
+                {
+                    sources.Add(SdlGamepadSource.Connect(controller));
+                }
+                catch (InvalidOperationException exception) when (IsUnmappedController(exception))
+                {
+                }
             }
 
             return sources;
@@ -247,5 +253,10 @@ internal sealed class PhysicalControllerPump(
 
             throw;
         }
+    }
+
+    private static bool IsUnmappedController(InvalidOperationException exception)
+    {
+        return exception.Message.Contains("mapping", StringComparison.OrdinalIgnoreCase);
     }
 }

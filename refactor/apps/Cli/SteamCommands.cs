@@ -3,10 +3,11 @@ using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using VirtualMouse.Hosting;
+using VirtualMouse.Settings;
 using VirtualMouse.Settings.Profiles;
 using VirtualMouse.Steam;
 
-namespace Refactor.Cli;
+namespace VirtualMouse.Cli;
 
 internal static class SteamCommands
 {
@@ -138,19 +139,23 @@ internal static class SteamCommands
     private static Command CreateSrmCommand()
     {
         Command command = new("export", "Export configured profiles to SRM manifest.");
-        Argument<string> path = new("path")
+        Argument<string?> path = new("path")
         {
-            DefaultValueFactory = (_) => Path.Combine(AppContext.BaseDirectory, "srm-manifest.json"),
-            Description = "Path to the SRM manifest file."
+            Arity = ArgumentArity.ZeroOrOne,
+            Description = "Path to the SRM manifest file. Overrides configured path.",
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
             using IHost app = AppSetup.Create();
             ProfilesService profiles = app.Services.GetRequiredService<ProfilesService>();
+            ApplicationSettingsService settings =
+                app.Services.GetRequiredService<ApplicationSettingsService>();
+            SettingsFile settingsFile = app.Services.GetRequiredService<SettingsFile>();
 
-            string manifestPath = ResolveManifestPath(parseResult.GetValue(path) ??
-                throw new ArgumentNullException("Manifest path is required."));
+            string manifestPath = ResolveManifestPath(
+                parseResult.GetValue(path) ?? settings.Current.Steam.SrmExportPath,
+                settingsFile.Path);
             string shortcutExecutable = Path.Combine(AppContext.BaseDirectory, "Shortcut.exe");
 
             string manifestContent = SteamRomManagerExport.CreateJson(profiles, shortcutExecutable);
@@ -228,12 +233,13 @@ internal static class SteamCommands
         return appId == SteamInputClient.DesktopConfigAppId ? "Desktop" : "unknown";
     }
 
-    private static string ResolveManifestPath(string path)
+    private static string ResolveManifestPath(string? path, string settingsPath)
     {
-        string filePath = Environment.ExpandEnvironmentVariables(path);
+        string filePath = Environment.ExpandEnvironmentVariables(
+            string.IsNullOrWhiteSpace(path) ? "srm-manifest.json" : path);
         return Path.IsPathFullyQualified(filePath)
             ? filePath
-            : Path.Combine(AppContext.BaseDirectory, filePath);
+            : Path.Combine(Path.GetDirectoryName(settingsPath) ?? AppContext.BaseDirectory, filePath);
     }
 
     public static void WriteFile(string manifestPath, string content)

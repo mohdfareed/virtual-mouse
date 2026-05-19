@@ -29,12 +29,16 @@ public sealed class SteamRomManagerExportTests
             using ServiceProvider services = CreateServices(settingsPath);
             ProfilesService profiles = services.GetRequiredService<ProfilesService>();
 
-            string json = SteamRomManagerExport.CreateJson(profiles, @"C:\Tools\vm\Shortcut.exe");
+            string json = SteamRomManagerExport.CreateJson(
+                profiles,
+                @"C:\Tools\vm\Shortcut.exe");
 
             using JsonDocument document = JsonDocument.Parse(json);
             JsonElement entry = document.RootElement[0];
             Assert.AreEqual("Frag Punk", entry.GetProperty("title").GetString());
-            Assert.AreEqual(@"C:\Tools\vm\Shortcut.exe", entry.GetProperty("target").GetString());
+            Assert.AreEqual(
+                @"C:\Tools\vm\Shortcut.exe",
+                entry.GetProperty("target").GetString());
             Assert.AreEqual(@"""frag punk""", entry.GetProperty("launchOptions").GetString());
         }
         finally

@@ -198,7 +198,13 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
         {
             foreach (SdlControllerInfo controller in controllers)
             {
-                sources.Add(SdlGamepadSource.Connect(controller));
+                try
+                {
+                    sources.Add(SdlGamepadSource.Connect(controller));
+                }
+                catch (InvalidOperationException exception) when (IsUnmappedController(exception))
+                {
+                }
             }
 
             return sources;
@@ -413,6 +419,11 @@ internal sealed class ClientControllerStreams(ILogger logger) : IAsyncDisposable
             exception is OperationCanceledException or IOException or ObjectDisposedException)
         {
         }
+    }
+
+    private static bool IsUnmappedController(InvalidOperationException exception)
+    {
+        return exception.Message.Contains("mapping", StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed record ControllerSlotIdentity(string PhysicalId, string Label);

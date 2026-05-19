@@ -9,7 +9,7 @@ using VirtualMouse.Forwarding;
 using VirtualMouse.Hosting;
 using VirtualMouse.Runtime;
 
-namespace Refactor.Cli;
+namespace VirtualMouse.Cli;
 
 internal static class ServerStatusCommand
 {

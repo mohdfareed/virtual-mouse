@@ -30,10 +30,10 @@
   <Folder Name="/cli/">
     <Project Path="cli/Cli.csproj" />
   </Folder>
-  <Folder Name="/refactor/" />
-
-  <Folder Name="/refactor/cli/">
-    <Project Path="refactor/cli/Refactor.Cli.csproj" />
+  <Folder Name="/refactor/apps/">
+    <Project Path="refactor/apps/Cli/Cli.csproj" />
+    <Project Path="refactor/apps/Shortcut/Shortcut.csproj" />
+    <Project Path="refactor/apps/Tray/Tray.csproj" />
   </Folder>
 
   <Folder Name="/refactor/src/">

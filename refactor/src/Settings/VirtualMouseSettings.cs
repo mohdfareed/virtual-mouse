@@ -24,8 +24,21 @@ public sealed class VirtualMouseSettings
     /// <summary>VIIPER output settings.</summary>
     public ViiperSettings Viiper { get; set; } = new();
 
+    /// <summary>Steam integration settings.</summary>
+    public SteamSettings Steam { get; set; } = new();
+
     /// <summary>Configured game profiles by profile id.</summary>
     public Dictionary<string, GameProfile> Games { get; } = [];
+}
+
+/// <summary>Steam integration settings.</summary>
+public sealed class SteamSettings
+{
+    /// <summary>Configuration section name for Steam settings.</summary>
+    public const string SectionName = VirtualMouseSettings.SectionName + ":Steam";
+
+    /// <summary>Default Steam ROM Manager manifest export path.</summary>
+    public string? SrmExportPath { get; set; }
 }
 
 /// <summary>VIIPER output settings.</summary>

@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using VirtualMouse.Hosting;
 
-namespace Refactor.Cli;
+namespace VirtualMouse.Cli;
 
 internal static class Commands
 {

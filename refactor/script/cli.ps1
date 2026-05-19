@@ -1,6 +1,6 @@
-Push-Location "$PSScriptRoot\..\cli"
+Push-Location "$PSScriptRoot\..\apps\Cli"
 try {
-    dotnet run -- @args
+    dotnet run --project .\Cli.csproj -- @args
 }
 finally {
     Pop-Location

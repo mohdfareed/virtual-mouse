@@ -176,6 +176,12 @@ public sealed class ServerService : IAsyncDisposable
         }
     }
 
+    /// <summary>Gets current server status.</summary>
+    public Task<ServerStatus> GetStatusAsync()
+    {
+        return _sessions.GetStatusAsync();
+    }
+
     /// <summary>Stops server-owned pumps.</summary>
     public async ValueTask DisposeAsync()
     {
