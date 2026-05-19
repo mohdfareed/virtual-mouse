@@ -22,9 +22,14 @@ internal static class Commands
         {
             Description = "Steam app id to report for this client run.",
         };
+        Option<bool> kill = new("--kill")
+        {
+            Description = "Kill matching receiver processes when the client is stopped.",
+        };
 
         run.Arguments.Add(profile);
         run.Options.Add(steamAppId);
+        run.Options.Add(kill);
         run.SetAction(RunClientAsync);
         client.Subcommands.Add(run);
 
@@ -51,12 +56,13 @@ internal static class Commands
         string? profileId = parseResult.GetValue<string>("profile");
         ArgumentException.ThrowIfNullOrEmpty(profileId, nameof(profileId));
         uint? steamAppId = parseResult.GetValue<uint?>("--app-id");
+        bool kill = parseResult.GetValue<bool>("--kill");
 
         using IHost app = AppSetup.Create();
         GameClient game = app.Services.GetRequiredService<GameClient>();
         await using (game.ConfigureAwait(false))
         {
-            await game.RunAsync(profileId, steamAppId, cancellationToken).ConfigureAwait(false);
+            await game.RunAsync(profileId, steamAppId, kill, cancellationToken).ConfigureAwait(false);
         }
     }
 

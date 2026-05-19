@@ -7,6 +7,8 @@ namespace VirtualMouse.Forwarding;
 internal sealed class ControllerSlot(ControllerId controllerId, Action<ControllerSlot, ControllerFeedback> feedback)
 {
     private IDisposable? _feedbackSubscription;
+    private ControllerFeedback? _heldFeedback;
+    private FeedbackTarget? _feedbackTarget;
 
     public ControllerId ControllerId { get; private set; } = controllerId;
 
@@ -30,6 +32,7 @@ internal sealed class ControllerSlot(ControllerId controllerId, Action<Controlle
     {
         foreach (ControllerEndpointId endpointId in Steam.Keys.Where(id => id.ClientId == clientId).ToArray())
         {
+            StopFeedbackTarget(new FeedbackTarget(endpointId));
             _ = Steam.Remove(endpointId);
         }
     }
@@ -53,12 +56,27 @@ internal sealed class ControllerSlot(ControllerId controllerId, Action<Controlle
         return true;
     }
 
-    public bool TrySendFeedback(Guid clientId, ControllerFeedback feedback)
+    public void ApplyFeedback(Guid clientId, ControllerFeedback feedback)
     {
-        return
-            (FindSteam(clientId) is { } steam &&
-            steam.TrySendFeedback(feedback)) ||
-            (Physical?.TrySendFeedback(feedback) ?? false);
+        FeedbackTarget? previous = _feedbackTarget;
+        FeedbackTarget? target = null;
+
+        foreach (FeedbackTarget candidate in FindFeedbackTargets(clientId, feedback))
+        {
+            if (SendFeedback(candidate, feedback))
+            {
+                target = candidate;
+                break;
+            }
+        }
+
+        if (previous is { } previousTarget && previousTarget != target)
+        {
+            StopFeedbackTarget(previousTarget);
+        }
+
+        _heldFeedback = feedback;
+        _feedbackTarget = target;
     }
 
     public ControllerEndpointState? FindSteam(Guid clientId)
@@ -101,6 +119,7 @@ internal sealed class ControllerSlot(ControllerId controllerId, Action<Controlle
 
     public void DisconnectOutput(List<IControllerOutput>? dispose = null)
     {
+        StopHeldFeedback();
         IControllerOutput? output = Output;
         if (output is null)
         {
@@ -122,8 +141,82 @@ internal sealed class ControllerSlot(ControllerId controllerId, Action<Controlle
         }
     }
 
+    public void RetargetFeedback(Guid? clientId)
+    {
+        if (_heldFeedback is not { } feedback)
+        {
+            return;
+        }
+
+        if (!clientId.HasValue)
+        {
+            StopHeldFeedback();
+            return;
+        }
+
+        ApplyFeedback(clientId.Value, feedback);
+    }
+
+    public void ReplayFeedback(Guid clientId)
+    {
+        if (_heldFeedback is { } feedback)
+        {
+            ApplyFeedback(clientId, feedback);
+        }
+    }
+
+    public void StopHeldFeedback()
+    {
+        if (_feedbackTarget is { } target)
+        {
+            StopFeedbackTarget(target);
+        }
+
+        _heldFeedback = null;
+        _feedbackTarget = null;
+    }
+
     // MARK: Privates
     // ========================================================================
+
+    private IEnumerable<FeedbackTarget> FindFeedbackTargets(Guid clientId, ControllerFeedback feedback)
+    {
+        if (feedback.IsEmpty)
+        {
+            yield break;
+        }
+
+        foreach (KeyValuePair<ControllerEndpointId, ControllerEndpointState> endpoint in Steam)
+        {
+            if (endpoint.Key.ClientId == clientId && endpoint.Value.CanAccept(feedback))
+            {
+                yield return new FeedbackTarget(endpoint.Key);
+            }
+        }
+
+        if (Physical is { } physical && physical.CanAccept(feedback))
+        {
+            yield return FeedbackTarget.Physical;
+        }
+    }
+
+    private bool SendFeedback(FeedbackTarget target, ControllerFeedback feedback)
+    {
+        return target.EndpointId is { } endpointId
+            ? Steam.TryGetValue(endpointId, out ControllerEndpointState steam) &&
+            steam.TrySendFeedback(feedback)
+            : Physical?.TrySendFeedback(feedback) ?? false;
+    }
+
+    private void StopFeedbackTarget(FeedbackTarget target)
+    {
+        if (_heldFeedback is null)
+        {
+            return;
+        }
+
+        _ = SendFeedback(target, ControllerFeedback.StopRumble);
+    }
 
     private static ControllerState Select(
         ControllerEndpointState steam,
@@ -148,11 +241,22 @@ internal readonly record struct ControllerEndpointState(
 {
     public bool Supports(ControllerFeatures feature)
     {
-        return (Features & feature) != 0;
+        return (Features & feature) == feature;
+    }
+
+    public bool CanAccept(ControllerFeedback feedback)
+    {
+        ControllerFeatures required = feedback.RequiredFeatures;
+        return FeedbackSink is not null && required != ControllerFeatures.None && Supports(required);
     }
 
     public bool TrySendFeedback(ControllerFeedback feedback)
     {
-        return FeedbackSink is not null && FeedbackSink.TrySendFeedback(feedback);
+        return CanAccept(feedback) && FeedbackSink!.TrySendFeedback(feedback);
     }
+}
+
+internal readonly record struct FeedbackTarget(ControllerEndpointId? EndpointId)
+{
+    public static FeedbackTarget Physical { get; } = new(null);
 }

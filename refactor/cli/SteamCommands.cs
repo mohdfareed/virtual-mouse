@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using VirtualMouse.Hosting;
 using VirtualMouse.Settings.Profiles;
 using VirtualMouse.Steam;
 
@@ -16,6 +17,7 @@ internal static class SteamCommands
         steam.Subcommands.Add(CreateForceCommand());
         steam.Subcommands.Add(CreateClearCommand());
         steam.Subcommands.Add(CreateOpenConfigCommand());
+        steam.Subcommands.Add(CreateStatusCommand());
         steam.Subcommands.Add(CreateSrmCommand());
         return steam;
     }
@@ -102,6 +104,37 @@ internal static class SteamCommands
         return command;
     }
 
+    private static Command CreateStatusCommand()
+    {
+        Command command = new("status", "Show Steam Input forcing tracked by the running server.");
+
+        command.SetAction(async (_, cancellationToken) =>
+        {
+            using IHost app = AppSetup.Create();
+            ClientService client = app.Services.GetRequiredService<ClientService>();
+            await using (client.ConfigureAwait(false))
+            {
+                using CancellationTokenSource timeout =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(TimeSpan.FromSeconds(2));
+
+                await client.ConnectAsync(timeout.Token).ConfigureAwait(false);
+                ServerStatus status = await client.GetStatusAsync(timeout.Token).ConfigureAwait(false);
+                ServerSteamInputStatus steamInput = status.SteamInput;
+                string name = steamInput.AppId is uint appId ? ResolveGameName(appId) : "none";
+
+                await Console.Out.WriteLineAsync(
+                        $"forced={(steamInput.Forced ? "true" : "false")} " +
+                        $"appId={FormatAppId(steamInput.AppId)} name={name} " +
+                        $"client={steamInput.ClientId?.ToString() ?? "none"} " +
+                        $"error={steamInput.LastError ?? "none"}")
+                    .ConfigureAwait(false);
+            }
+        });
+
+        return command;
+    }
+
     private static Command CreateSrmCommand()
     {
         Command command = new("export", "Export configured profiles to SRM manifest.");
@@ -166,6 +199,33 @@ internal static class SteamCommands
         return string.Equals(value, "desktop", StringComparison.OrdinalIgnoreCase)
             ? SteamInputClient.DesktopConfigAppId
             : uint.Parse(value ?? string.Empty, NumberStyles.Integer, CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatAppId(uint? appId)
+    {
+        return appId.HasValue
+            ? appId.Value.ToString(CultureInfo.InvariantCulture)
+            : "none";
+    }
+
+    private static string ResolveGameName(uint appId)
+    {
+        try
+        {
+            foreach (SteamGame game in SteamInputClient.ListGames())
+            {
+                if (game.AppId == appId)
+                {
+                    return game.Name;
+                }
+            }
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+        }
+
+        return appId == SteamInputClient.DesktopConfigAppId ? "Desktop" : "unknown";
     }
 
     private static string ResolveManifestPath(string path)

@@ -137,8 +137,89 @@ public sealed class ControllerBrokerTests
 
         steamFeedback.Accept = false;
         factory.SingleOutput.EmitFeedback(new ControllerFeedback(new ControllerRumble(30, 40)));
-        Assert.HasCount(2, steamFeedback.Feedback);
+        Assert.HasCount(3, steamFeedback.Feedback);
         Assert.HasCount(1, physicalFeedback.Feedback);
+        Assert.AreEqual((ushort)0, steamFeedback.Feedback[2].Rumble?.LowFrequency);
+    }
+
+    /// <summary>Held feedback is replayed when the active endpoint reconnects.</summary>
+    [TestMethod]
+    public void FeedbackReplaysWhenEndpointReconnects()
+    {
+        Guid clientId = Guid.NewGuid();
+        FakeControllerOutputFactory factory = new();
+        FakeFeedbackSink firstFeedback = new(accept: true);
+        FakeFeedbackSink secondFeedback = new(accept: true);
+        using ControllerBroker broker = new(factory);
+
+        broker.RegisterClient(clientId, ControllerOutput.Xbox360);
+        broker.SetActiveClient(clientId);
+        broker.UpdateClientController(
+            clientId,
+            ControllerId,
+            new ControllerState(Standard(ControllerButtons.South), null, null),
+            ControllerFeatures.StandardControls | ControllerFeatures.Rumble,
+            firstFeedback);
+
+        factory.SingleOutput.EmitFeedback(new ControllerFeedback(new ControllerRumble(10, 20)));
+        broker.UpdateClientController(
+            clientId,
+            ControllerId,
+            new ControllerState(Standard(ControllerButtons.South), null, null),
+            ControllerFeatures.StandardControls | ControllerFeatures.Rumble,
+            secondFeedback);
+
+        Assert.HasCount(1, firstFeedback.Feedback);
+        Assert.HasCount(1, secondFeedback.Feedback);
+        Assert.AreEqual((ushort)10, secondFeedback.Feedback[0].Rumble?.LowFrequency);
+    }
+
+    /// <summary>Held feedback is stopped when the active client is cleared.</summary>
+    [TestMethod]
+    public void FeedbackStopsWhenActiveClientClears()
+    {
+        Guid clientId = Guid.NewGuid();
+        FakeControllerOutputFactory factory = new();
+        FakeFeedbackSink feedback = new(accept: true);
+        using ControllerBroker broker = new(factory);
+
+        broker.RegisterClient(clientId, ControllerOutput.Xbox360);
+        broker.SetActiveClient(clientId);
+        broker.UpdateClientController(
+            clientId,
+            ControllerId,
+            new ControllerState(Standard(ControllerButtons.South), null, null),
+            ControllerFeatures.StandardControls | ControllerFeatures.Rumble,
+            feedback);
+
+        factory.SingleOutput.EmitFeedback(new ControllerFeedback(new ControllerRumble(10, 20)));
+        broker.SetActiveClient(null);
+
+        Assert.HasCount(2, feedback.Feedback);
+        Assert.AreEqual((ushort)0, feedback.Feedback[1].Rumble?.LowFrequency);
+    }
+
+    /// <summary>Feedback is not sent to endpoints that do not claim the feature.</summary>
+    [TestMethod]
+    public void FeedbackRequiresMatchingCapability()
+    {
+        Guid clientId = Guid.NewGuid();
+        FakeControllerOutputFactory factory = new();
+        FakeFeedbackSink feedback = new(accept: true);
+        using ControllerBroker broker = new(factory);
+
+        broker.RegisterClient(clientId, ControllerOutput.Xbox360);
+        broker.SetActiveClient(clientId);
+        broker.UpdateClientController(
+            clientId,
+            ControllerId,
+            new ControllerState(Standard(ControllerButtons.South), null, null),
+            ControllerFeatures.StandardControls,
+            feedback);
+
+        factory.SingleOutput.EmitFeedback(new ControllerFeedback(new ControllerRumble(10, 20)));
+
+        Assert.IsEmpty(feedback.Feedback);
     }
 
     /// <summary>Feedback returns to the active client endpoint for the output slot.</summary>

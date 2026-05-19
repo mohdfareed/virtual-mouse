@@ -9,29 +9,40 @@ return await RunAsync(args).ConfigureAwait(false);
 
 static async Task<int> RunAsync(string[] args)
 {
-    if (args.Length is 0 or > 3)
+    if (args.Length is 0 or > 4)
     {
         return 2;
     }
 
     string profileId = args[0];
     uint? appId = null;
-    if (args.Length == 3)
+    bool killReceivers = false;
+    for (int i = 1; i < args.Length; i++)
     {
-        if (!string.Equals(args[1], "--app-id", StringComparison.OrdinalIgnoreCase) ||
-            !uint.TryParse(args[2], out uint parsedAppId))
+        if (string.Equals(args[i], "--kill", StringComparison.OrdinalIgnoreCase))
         {
-            return 2;
+            killReceivers = true;
+            continue;
         }
 
-        appId = parsedAppId;
+        if (string.Equals(args[i], "--app-id", StringComparison.OrdinalIgnoreCase) &&
+            i + 1 < args.Length &&
+            uint.TryParse(args[i + 1], out uint parsedAppId))
+        {
+            appId = parsedAppId;
+            i++;
+            continue;
+        }
+
+        return 2;
     }
 
     using IHost app = CreateApp();
     GameClient game = app.Services.GetRequiredService<GameClient>();
     await using (game.ConfigureAwait(false))
     {
-        await game.RunAsync(profileId, appId, CancellationToken.None).ConfigureAwait(false);
+        await game.RunAsync(profileId, appId, killReceivers, CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     return 0;

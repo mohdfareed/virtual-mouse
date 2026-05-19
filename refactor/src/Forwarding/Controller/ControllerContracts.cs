@@ -236,4 +236,18 @@ public readonly record struct ControllerAdaptiveTriggers(byte LeftMode, byte Rig
 public readonly record struct ControllerFeedback(
     ControllerRumble? Rumble = null,
     ControllerLight? Light = null,
-    ControllerAdaptiveTriggers? AdaptiveTriggers = null);
+    ControllerAdaptiveTriggers? AdaptiveTriggers = null)
+{
+    /// <summary>Feature groups required to apply this feedback.</summary>
+    public ControllerFeatures RequiredFeatures =>
+        (Rumble is null ? ControllerFeatures.None : ControllerFeatures.Rumble) |
+        (Light is null ? ControllerFeatures.None : ControllerFeatures.Light) |
+        (AdaptiveTriggers is null ? ControllerFeatures.None : ControllerFeatures.AdaptiveTriggers);
+
+    /// <summary>Gets whether this feedback carries any feature state.</summary>
+    public bool IsEmpty => RequiredFeatures == ControllerFeatures.None;
+
+    /// <summary>Feedback that stops held rumble.</summary>
+    public static ControllerFeedback StopRumble { get; } =
+        new(new ControllerRumble(0, 0));
+}

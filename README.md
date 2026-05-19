@@ -23,10 +23,10 @@ Project for local input forwarding transports.
 ## TODO
 
 - [ ] Fix CTRL-C handling on server and client (noop correctly).
-- [ ] DS4 output contract and DS4-specific mapping.
-- [ ] SDL-VIIPER touchpad, and other controller capability models.
+- [ ] DS4 output contract + VIIPER DS4 transport.
+- [ ] SDL-VIIPER touchpad, and feedback capabilities.
   - [ ] rumble, trigger rumble, light-bar RGB, flash timing
-  - [ ] buttons, sticks, triggers, gyro, accel, touchpad
+- [ ] Keyboard shortcut to toggle output/motion.
 - [ ] Rename project
 - [ ] Merge refactored project files back into the main branch.
 - [ ] Documentation and README.

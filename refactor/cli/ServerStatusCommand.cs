@@ -84,6 +84,12 @@ internal static class ServerStatusCommand
         PrintItem(sb, "activeClient", status.Runtime.ActiveClientId?.ToString() ?? "none");
         PrintItem(sb, "foregroundPid", status.Runtime.ForegroundProcessId);
 
+        PrintSection(sb, "Steam Input");
+        PrintItem(sb, "forced", status.SteamInput.Forced);
+        PrintItem(sb, "appId", FormatAppId(status.SteamInput.AppId));
+        PrintItem(sb, "client", status.SteamInput.ClientId?.ToString() ?? "none");
+        PrintItem(sb, "error", status.SteamInput.LastError ?? "none");
+
         PrintSection(sb, "Clients");
         if (status.Runtime.Clients.Count == 0)
         {

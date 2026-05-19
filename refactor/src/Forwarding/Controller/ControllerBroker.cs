@@ -62,6 +62,7 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
                 ? clientId
                 : null;
             RefreshOutputs(dispose);
+            RetargetFeedback();
         }
 
         DisposeOutputs(dispose);
@@ -86,6 +87,7 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
             }
 
             RefreshOutputs(dispose);
+            RetargetFeedback();
         }
 
         DisposeOutputs(dispose);
@@ -104,6 +106,7 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
             }
 
             RefreshOutputs(dispose);
+            RetargetFeedback();
         }
 
         DisposeOutputs(dispose);
@@ -134,6 +137,10 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
 
             RefreshOutput(slot);
             send = CreateMergedSendIfActive(slot);
+            if (_activeClientId == clientId)
+            {
+                slot.ReplayFeedback(clientId);
+            }
         }
 
         SendOutput(send);
@@ -165,6 +172,10 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
             ControllerSlot slot = GetOrCreateSlot(controllerId);
             slot.Physical = new ControllerEndpointState(state, features, feedbackSink);
             send = CreateMergedSendIfActive(slot);
+            if (_activeClientId.HasValue)
+            {
+                slot.ReplayFeedback(_activeClientId.Value);
+            }
         }
 
         SendOutput(send);
@@ -353,7 +364,7 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
                 return;
             }
 
-            _ = slot.TrySendFeedback(_activeClientId.Value, feedback);
+            slot.ApplyFeedback(_activeClientId.Value, feedback);
         }
     }
 
@@ -366,14 +377,19 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
     {
         ControllerFeatures features =
             ControllerFeatures.StandardControls |
-            ControllerFeatures.Touchpad |
-            ControllerFeatures.Light |
-            ControllerFeatures.Rumble |
-            ControllerFeatures.AdaptiveTriggers;
+            ControllerFeatures.Touchpad;
 
         return _physicalMotionEnabled
             ? features | ControllerFeatures.Motion
             : features;
+    }
+
+    private void RetargetFeedback()
+    {
+        foreach (ControllerSlot slot in _slots.Values)
+        {
+            slot.RetargetFeedback(_activeClientId);
+        }
     }
 
     // MARK: Static Privates

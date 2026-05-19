@@ -72,6 +72,12 @@ public sealed class ServerService : IAsyncDisposable
         {
             _physicalControllers = new PhysicalControllerPump(broker, logger);
             _mouseInput = new MouseInputPump(mouseBroker, logger);
+            _activeClients = activeClients ?? ServerActiveClientLoop.CreateDefault(
+                activeRuntime,
+                options.Value,
+                logger,
+                broker,
+                mouseBroker);
 
             _sessions = new ServerSessions(
                 logger,
@@ -82,14 +88,8 @@ public sealed class ServerService : IAsyncDisposable
                 controllerPipes,
                 () => new ServerInputStatus(
                     _physicalControllers.GetStatus(),
-                    _mouseInput.GetStatus()));
-
-            _activeClients = activeClients ?? ServerActiveClientLoop.CreateDefault(
-                activeRuntime,
-                options.Value,
-                logger,
-                broker,
-                mouseBroker);
+                    _mouseInput.GetStatus()),
+                () => _activeClients.GetSteamInputStatus());
 
             broker = null;
             mouseBroker = null;

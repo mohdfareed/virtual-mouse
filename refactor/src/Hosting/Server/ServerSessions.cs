@@ -22,7 +22,8 @@ internal sealed class ServerSessions(
     ControllerBroker forwarding,
     MouseBroker mouseForwarding,
     ControllerPipeSessions controllerPipes,
-    Func<ServerInputStatus>? getInputStatus = null) : IAsyncDisposable
+    Func<ServerInputStatus>? getInputStatus = null,
+    Func<ServerSteamInputStatus>? getSteamInputStatus = null) : IAsyncDisposable
 {
     private readonly ConcurrentDictionary<Guid, ConnectedClient> _clients = [];
     private bool _disposed;
@@ -59,6 +60,7 @@ internal sealed class ServerSessions(
                 new ServerInputStatus(
                     new PhysicalControllerPumpStatus(false, 0, [], null),
                     new MouseInputPumpStatus(false, false, null)),
+            SteamInput = getSteamInputStatus?.Invoke() ?? new ServerSteamInputStatus(false, null, null, null),
             ControllerPipes = controllerPipes.GetStatus(),
         });
     }

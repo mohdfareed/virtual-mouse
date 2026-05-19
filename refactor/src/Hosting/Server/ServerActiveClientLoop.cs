@@ -14,8 +14,15 @@ internal sealed class ServerActiveClientLoop(
     ActiveClientRegistry clients,
     Func<int> getForegroundProcessId,
     TimeSpan pollInterval,
-    Action<ActiveClientChangedEventArgs> activeClientChanged)
+    Action<ActiveClientChangedEventArgs>? activeClientChanged,
+    ILogger? logger = null,
+    SteamInputClient? steam = null,
+    ControllerBroker? forwarding = null,
+    MouseBroker? mouseForwarding = null)
 {
+    private readonly Lock _steamStatusGate = new();
+    private ServerSteamInputStatus _steamStatus = new(false, null, null, null);
+
     public static ServerActiveClientLoop CreateDefault(
         ActiveClientRegistry clients,
         HostingSettings settings,
@@ -27,7 +34,11 @@ internal sealed class ServerActiveClientLoop(
             clients,
             GetForegroundProcessId,
             TimeSpan.FromMilliseconds(settings.ForegroundPollMilliseconds),
-            args => ActiveClientChanged(clients, logger, new SteamInputClient(), forwarding, mouseForwarding, args));
+            activeClientChanged: null,
+            logger,
+            new SteamInputClient(),
+            forwarding,
+            mouseForwarding);
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -54,9 +65,23 @@ internal sealed class ServerActiveClientLoop(
         }
     }
 
+    public ServerSteamInputStatus GetSteamInputStatus()
+    {
+        lock (_steamStatusGate)
+        {
+            return _steamStatus;
+        }
+    }
+
     private void OnActiveClientChanged(object? sender, ActiveClientChangedEventArgs args)
     {
-        activeClientChanged(args);
+        if (activeClientChanged is not null)
+        {
+            activeClientChanged(args);
+            return;
+        }
+
+        ActiveClientChanged(args);
     }
 
     private static int GetForegroundProcessId()
@@ -71,14 +96,13 @@ internal sealed class ServerActiveClientLoop(
         return processId <= int.MaxValue ? (int)processId : 0;
     }
 
-    private static void ActiveClientChanged(
-        ActiveClientRegistry clients,
-        ILogger logger,
-        SteamInputClient steam,
-        ControllerBroker? forwarding,
-        MouseBroker? mouseForwarding,
-        ActiveClientChangedEventArgs args)
+    private void ActiveClientChanged(ActiveClientChangedEventArgs args)
     {
+        if (logger is null || steam is null)
+        {
+            return;
+        }
+
         HostingLog.ActiveClientChanged(logger, args.PreviousClientId, args.CurrentClientId);
 
         forwarding?.SetActiveClient(args.CurrentClientId);
@@ -94,10 +118,12 @@ internal sealed class ServerActiveClientLoop(
             {
                 HostingLog.ForcingSteamInputAppId(logger, appId.Value, args.CurrentClientId);
                 steam.ForceConfigAsync(appId.Value).AsTask().GetAwaiter().GetResult();
+                SetSteamInputStatus(new ServerSteamInputStatus(true, appId.Value, args.CurrentClientId, null));
             }
             else
             {
                 HostingLog.NoSteamInputAppIdToForce(logger);
+                SetSteamInputStatus(new ServerSteamInputStatus(false, null, args.CurrentClientId, null));
             }
         }
         catch (Exception exception) when (
@@ -106,6 +132,15 @@ internal sealed class ServerActiveClientLoop(
                 System.ComponentModel.Win32Exception)
         {
             HostingLog.SteamInputForcingFailed(logger, args.CurrentClientId, exception.Message);
+            SetSteamInputStatus(new ServerSteamInputStatus(false, null, args.CurrentClientId, exception.Message));
+        }
+    }
+
+    private void SetSteamInputStatus(ServerSteamInputStatus status)
+    {
+        lock (_steamStatusGate)
+        {
+            _steamStatus = status;
         }
     }
 

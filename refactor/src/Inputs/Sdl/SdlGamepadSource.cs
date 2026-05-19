@@ -30,6 +30,7 @@ public sealed class SdlGamepadSource : IControllerFeedbackSink, IDisposable, IAs
 
         HasGyro = EnableSensor(gamepad, SDL.SensorType.Gyro);
         HasAccelerometer = EnableSensor(gamepad, SDL.SensorType.Accel);
+        HasRumble = GetGamepadBooleanProperty(gamepad, SDL.Props.GamepadCapRumbleBoolean);
     }
 
     // MARK: Publics
@@ -47,10 +48,13 @@ public sealed class SdlGamepadSource : IControllerFeedbackSink, IDisposable, IAs
     /// <summary>Gets whether the connected controller exposes an accelerometer sensor.</summary>
     public bool HasAccelerometer { get; }
 
+    /// <summary>Gets whether the connected controller exposes basic rumble.</summary>
+    public bool HasRumble { get; }
+
     /// <summary>Gets controller feature groups supported by this source.</summary>
     public ControllerFeatures Features =>
         ControllerFeatures.StandardControls |
-        ControllerFeatures.Rumble |
+        (HasRumble ? ControllerFeatures.Rumble : ControllerFeatures.None) |
         (HasGyro || HasAccelerometer ? ControllerFeatures.Motion : ControllerFeatures.None);
 
     /// <summary>Gets or sets whether motion data is emitted.</summary>
@@ -89,7 +93,7 @@ public sealed class SdlGamepadSource : IControllerFeedbackSink, IDisposable, IAs
     /// <inheritdoc />
     public bool TrySendFeedback(ControllerFeedback feedback)
     {
-        if (feedback.Rumble is not { } rumble)
+        if (!HasRumble || feedback.Rumble is not { } rumble)
         {
             return false;
         }
@@ -190,5 +194,11 @@ public sealed class SdlGamepadSource : IControllerFeedbackSink, IDisposable, IAs
             SDL.GamepadHasSensor(gamepad, sensor) &&
             (SDL.GamepadSensorEnabled(gamepad, sensor) ||
             SDL.SetGamepadSensorEnabled(gamepad, sensor, enabled: true));
+    }
+
+    private static bool GetGamepadBooleanProperty(nint gamepad, string property)
+    {
+        uint properties = SDL.GetGamepadProperties(gamepad);
+        return properties != 0 && SDL.GetBooleanProperty(properties, property, defaultValue: false);
     }
 }

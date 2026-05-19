@@ -29,6 +29,7 @@ public sealed class GameClient(
     public async Task RunAsync(
         string profileId,
         uint? steamAppId,
+        bool killReceivers,
         CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
@@ -44,7 +45,7 @@ public sealed class GameClient(
                 .StartRunAsync(request, cancellationToken)
                 .ConfigureAwait(false);
 
-            ClientRunState state = new(launch, client.ClientId, request);
+            ClientRunState state = new(launch, client.ClientId, request, killReceivers);
             StartProfileProcess(state);
             AppDomain.CurrentDomain.ProcessExit += ProcessExit;
 
@@ -95,7 +96,7 @@ public sealed class GameClient(
     /// <summary>Launches a profile and reads Steam app id from settings or Steam.</summary>
     public Task RunAsync(string profileId, CancellationToken cancellationToken)
     {
-        return RunAsync(profileId, steamAppId: null, cancellationToken);
+        return RunAsync(profileId, steamAppId: null, killReceivers: false, cancellationToken);
     }
 
     /// <summary>Disposes the underlying client.</summary>
@@ -276,7 +277,7 @@ public sealed class GameClient(
 
     private void StopGameProcesses(ClientRunState state, string reason)
     {
-        if (state.LaunchedProcess is null)
+        if (state.LaunchedProcess is null && !state.KillReceivers)
         {
             return;
         }
@@ -291,7 +292,14 @@ public sealed class GameClient(
             state.GameStopRequested = true;
         }
 
-        int killed = GameProcessHost.KillLaunchedProcess(state.LaunchedProcess);
+        int killed = state.LaunchedProcess is null
+            ? 0
+            : GameProcessHost.KillLaunchedProcess(state.LaunchedProcess);
+        if (state.KillReceivers)
+        {
+            killed += GameProcessHost.Kill(GameProcessHost.FindReceivers(state.Launch.ReceiverProcesses));
+        }
+
         HostingLog.StoppedGameProcesses(logger, reason, killed);
     }
 
@@ -357,7 +365,8 @@ public sealed class GameClient(
     private sealed class ClientRunState(
         ClientRunLaunch launch,
         Guid? registeredClientId,
-        StartRunRequest request)
+        StartRunRequest request,
+        bool killReceivers)
     {
         public ClientRunLaunch Launch { get; set; } = launch;
 
@@ -368,6 +377,8 @@ public sealed class GameClient(
         public Guid? RegisteredClientId { get; set; } = registeredClientId;
 
         public StartRunRequest Request { get; } = request;
+
+        public bool KillReceivers { get; } = killReceivers;
 
         public bool SawReceiver { get; set; }
 

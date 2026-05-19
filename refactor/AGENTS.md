@@ -105,6 +105,12 @@
   wants that output kind. Active-client state gates report forwarding, not
   virtual-device lifetime. Dispose the output only when no attached clients need
   it or output is explicitly disabled.
+- Treat controller feedback such as rumble as held state owned by the logical
+  controller slot. Replay it when the selected endpoint reconnects or changes,
+  and send zero feedback to the old endpoint when it stops being the target.
+- Controller endpoint capabilities must be truthful. Do not claim rumble,
+  motion, touchpad, light, or adaptive-trigger support unless the source or
+  output can actually handle that feature group.
 - SDL gamepad indices are transport-local and can change between discovery
   calls. Use them only for the current client controller pipe snapshot; clear
   stale client controller endpoints whenever the client re-registers

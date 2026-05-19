@@ -26,6 +26,10 @@ public sealed record ServerStatus(int ConnectedClientCount)
             new PhysicalControllerPumpStatus(false, 0, [], null),
             new MouseInputPumpStatus(false, false, null));
 
+    /// <summary>Steam Input forcing status tracked by this server.</summary>
+    public ServerSteamInputStatus SteamInput { get; init; } =
+        new(false, null, null, null);
+
     /// <summary>Connected controller stream pipe status.</summary>
     public IReadOnlyList<ControllerPipeStatus> ControllerPipes { get; init; } = [];
 }
@@ -44,6 +48,13 @@ public sealed record PhysicalControllerPumpStatus(
 
 /// <summary>Raw Input mouse pump status.</summary>
 public sealed record MouseInputPumpStatus(bool Running, bool SourceConnected, string? LastError);
+
+/// <summary>Steam Input configuration currently forced by the server.</summary>
+public sealed record ServerSteamInputStatus(
+    bool Forced,
+    uint? AppId,
+    Guid? ClientId,
+    string? LastError);
 
 /// <summary>Controller pipe status for one connected client.</summary>
 public sealed record ControllerPipeStatus(
