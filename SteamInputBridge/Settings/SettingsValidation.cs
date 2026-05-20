@@ -49,23 +49,28 @@ internal static class SettingsValidation
         Collection<ShortcutEntry> shortcuts,
         List<string> failures)
     {
-        HashSet<string> keys = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> targetsByKey = new(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < shortcuts.Count; i++)
         {
             ShortcutEntry shortcut = shortcuts[i];
             string prefix = $"shortcuts:{i}";
+            string? keys = null;
             if (string.IsNullOrWhiteSpace(shortcut.Keys))
             {
                 failures.Add($"{prefix}:keys is required.");
             }
-            else if (!keys.Add(shortcut.Keys.Trim()))
+            else
             {
-                failures.Add($"{prefix}:keys duplicates another shortcut.");
+                keys = shortcut.Keys.Trim();
             }
 
             if (!shortcut.Target.HasValue)
             {
                 failures.Add($"{prefix}:target is required.");
+            }
+            else if (keys is not null && !targetsByKey.Add($"{keys}\0{shortcut.Target.Value}"))
+            {
+                failures.Add($"{prefix}:target duplicates another shortcut target for the same keys.");
             }
 
             if (!shortcut.Value.HasValue)

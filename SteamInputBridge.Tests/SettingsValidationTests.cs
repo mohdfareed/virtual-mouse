@@ -119,6 +119,53 @@ public sealed class SettingsValidationTests
         }
     }
 
+    /// <summary>Checks that one key combination can apply multiple shortcut targets.</summary>
+    [TestMethod]
+    public void ShortcutKeysCanBeSharedAcrossTargets()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "SteamInputBridge.Tests", Guid.NewGuid().ToString("N"));
+        _ = Directory.CreateDirectory(directory);
+        string settingsPath = Path.Combine(directory, "appsettings.json");
+
+        try
+        {
+            File.WriteAllText(settingsPath, SettingsWithGroupedShortcuts());
+            using ServiceProvider services = CreateServices(settingsPath);
+
+            ApplicationSettingsService settings = services.GetRequiredService<ApplicationSettingsService>();
+
+            Assert.HasCount(2, settings.Current.Shortcuts);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>Checks that repeated target actions on the same keys are rejected.</summary>
+    [TestMethod]
+    public void ShortcutKeysCannotRepeatTheSameTarget()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "SteamInputBridge.Tests", Guid.NewGuid().ToString("N"));
+        _ = Directory.CreateDirectory(directory);
+        string settingsPath = Path.Combine(directory, "appsettings.json");
+
+        try
+        {
+            File.WriteAllText(settingsPath, SettingsWithDuplicateShortcutTarget());
+            using ServiceProvider services = CreateServices(settingsPath);
+
+            InvalidOperationException exception = Assert.ThrowsExactly<InvalidOperationException>(
+                services.GetRequiredService<ApplicationSettingsService>);
+
+            StringAssert.Contains(exception.Message, "shortcuts:1:target", StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static ServiceProvider CreateServices(string settingsPath)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
@@ -192,6 +239,64 @@ public sealed class SettingsValidationTests
                 "ReceiverProcesses": [
                   "FragPunk.exe"
                 ]
+              }
+            }
+          }
+        }
+        """;
+    }
+
+    private static string SettingsWithGroupedShortcuts()
+    {
+        return """
+        {
+          "SteamInputBridge": {
+            "Shortcuts": [
+              {
+                "Name": "motion-on",
+                "Keys": "Ctrl+Alt+F15",
+                "Target": "Motion",
+                "Value": "Enabled"
+              },
+              {
+                "Name": "pointer-on",
+                "Keys": "Ctrl+Alt+F15",
+                "Target": "Pointer",
+                "Value": "Enabled"
+              }
+            ],
+            "Games": {
+              "game": {
+                "Executable": "C:\\Games\\Game\\game.exe"
+              }
+            }
+          }
+        }
+        """;
+    }
+
+    private static string SettingsWithDuplicateShortcutTarget()
+    {
+        return """
+        {
+          "SteamInputBridge": {
+            "Shortcuts": [
+              {
+                "Name": "motion-on",
+                "Keys": "Ctrl+Alt+F15",
+                "Target": "Motion",
+                "Value": "Enabled"
+              },
+              {
+                "Name": "motion-on-again",
+                "Keys": "Ctrl+Alt+F15",
+                "Target": "Motion",
+                "Value": "Enabled"
+              }
+            ],
+            "Games": {
+              "game": {
+                "Executable": "C:\\Games\\Game\\game.exe"
               }
             }
           }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using SteamInputBridge.Forwarding.Controller;
@@ -18,7 +19,7 @@ internal sealed class ServerShortcutService(
     ILogger<ServerShortcutService> logger) : IDisposable
 {
     private readonly Lock _gate = new();
-    private Dictionary<int, ShortcutEntry> _shortcuts = [];
+    private Dictionary<int, IReadOnlyList<ShortcutEntry>> _shortcuts = [];
     private bool _started;
     private bool _disposed;
 
@@ -55,9 +56,9 @@ internal sealed class ServerShortcutService(
 
     private void Apply(Collection<ShortcutEntry> entries)
     {
-        Dictionary<int, ShortcutEntry> shortcuts = [];
+        Dictionary<int, List<ShortcutEntry>> shortcuts = [];
         List<KeyboardShortcutRegistration> registrations = [];
-        HashSet<KeyboardShortcutCombination> combinations = [];
+        Dictionary<KeyboardShortcutCombination, int> idsByCombination = [];
         for (int i = 0; i < entries.Count; i++)
         {
             ShortcutEntry entry = entries[i];
@@ -72,20 +73,22 @@ internal sealed class ServerShortcutService(
                 continue;
             }
 
-            if (!combinations.Add(combination))
+            if (!idsByCombination.TryGetValue(combination, out int id))
             {
-                HostingLog.ShortcutSkipped(logger, ShortcutName(entry, i), "duplicate key combination");
-                continue;
+                id = idsByCombination.Count + 1;
+                idsByCombination[combination] = id;
+                shortcuts[id] = [];
+                registrations.Add(new KeyboardShortcutRegistration(id, combination));
             }
 
-            int id = i + 1;
-            shortcuts[id] = entry;
-            registrations.Add(new KeyboardShortcutRegistration(id, combination));
+            shortcuts[id].Add(entry);
         }
 
         lock (_gate)
         {
-            _shortcuts = shortcuts;
+            _shortcuts = shortcuts.ToDictionary(
+                static item => item.Key,
+                static item => (IReadOnlyList<ShortcutEntry>)item.Value);
         }
 
         try
@@ -101,34 +104,42 @@ internal sealed class ServerShortcutService(
 
     private void OnShortcutPressed(int id)
     {
-        ShortcutEntry? shortcut;
+        IReadOnlyList<ShortcutEntry>? shortcuts;
         lock (_gate)
         {
-            _ = _shortcuts.TryGetValue(id, out shortcut);
+            _ = _shortcuts.TryGetValue(id, out shortcuts);
         }
 
-        if (shortcut is null || !shortcut.Target.HasValue || !shortcut.Value.HasValue)
+        if (shortcuts is null)
         {
             return;
         }
 
-        bool enabled = shortcut.Value.Value == ShortcutValue.Enabled;
-        switch (shortcut.Target.Value)
+        foreach (ShortcutEntry shortcut in shortcuts)
         {
-            case ShortcutTarget.Motion:
-                controllers.SetPhysicalMotionEnabled(enabled);
-                break;
-            case ShortcutTarget.Pointer:
-                mouse.SetPointerOutputEnabled(enabled);
-                break;
-            default:
-                return;
-        }
+            if (!shortcut.Target.HasValue || !shortcut.Value.HasValue)
+            {
+                continue;
+            }
 
-        if (logger.IsEnabled(LogLevel.Information))
-        {
-            string name = ShortcutName(shortcut, id - 1);
-            HostingLog.ShortcutApplied(logger, name, shortcut.Target.Value, shortcut.Value.Value);
+            bool enabled = shortcut.Value.Value == ShortcutValue.Enabled;
+            switch (shortcut.Target.Value)
+            {
+                case ShortcutTarget.Motion:
+                    controllers.SetPhysicalMotionEnabled(enabled);
+                    break;
+                case ShortcutTarget.Pointer:
+                    mouse.SetPointerOutputEnabled(enabled);
+                    break;
+                default:
+                    continue;
+            }
+
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                string name = ShortcutName(shortcut, id - 1);
+                HostingLog.ShortcutApplied(logger, name, shortcut.Target.Value, shortcut.Value.Value);
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using System.Windows;
 using SteamInputBridge.App.Cli;
 using SteamInputBridge.App.Shortcut;
 using SteamInputBridge.App.Tray;
@@ -11,7 +12,15 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        return RunAsync(args).GetAwaiter().GetResult();
+        try
+        {
+            return RunAsync(args).GetAwaiter().GetResult();
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            ReportUnhandledException(args, exception);
+            return 1;
+        }
     }
 
     private static async Task<int> RunAsync(string[] args)
@@ -33,5 +42,21 @@ internal static class Program
     private static bool IsMode(string value, string mode)
     {
         return string.Equals(value, mode, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ReportUnhandledException(string[] args, Exception exception)
+    {
+        if (args.Length == 0 || IsMode(args[0], "tray"))
+        {
+            _ = MessageBox.Show(
+                exception.Message,
+                "Steam Input Bridge",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
+        WindowsConsole.AttachForCli();
+        Console.Error.WriteLine($"Unhandled exception: {exception}");
     }
 }
