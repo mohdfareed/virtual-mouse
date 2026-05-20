@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using VirtualMouse.Forwarding;
+using VirtualMouse.HidHide;
 using VirtualMouse.Runtime;
 using VirtualMouse.Settings;
 using VirtualMouse.Settings.Profiles;
@@ -29,6 +30,8 @@ public sealed class ServerService : IAsyncDisposable
     private readonly ControllerPipeSessions _controllerPipes;
     private readonly PhysicalControllerPump _physicalControllers;
     private readonly MouseInputPump _mouseInput;
+    private readonly HidHideProfileFirewall? _hidHide;
+    private readonly HidHideDeviceCatalog? _hidHideDevices;
     private readonly Func<CancellationToken, Task> _startupCleanup;
 
     // MARK: Construction
@@ -53,6 +56,8 @@ public sealed class ServerService : IAsyncDisposable
         ServerActiveClientLoop? activeClients,
         ControllerBroker? forwarding = null,
         MouseBroker? mouseForwarding = null,
+        HidHideProfileFirewall? hidHide = null,
+        HidHideDeviceCatalog? hidHideDevices = null,
         Func<CancellationToken, Task>? startupCleanup = null)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -60,6 +65,8 @@ public sealed class ServerService : IAsyncDisposable
         _logger = logger;
         _settingsFile = settingsFile;
         _startupCleanup = startupCleanup ?? (static _ => Task.CompletedTask);
+        _hidHide = hidHide;
+        _hidHideDevices = hidHideDevices;
         _controllerBroker = forwarding ?? new ControllerBroker(new NoopControllerOutputFactory());
         _mouseBroker = mouseForwarding ?? new MouseBroker(new NoopMouseOutputFactory());
         _controllerPipes = new ControllerPipeSessions(_controllerBroker, logger);
@@ -70,6 +77,9 @@ public sealed class ServerService : IAsyncDisposable
         _activeClients = activeClients ?? ServerActiveClientLoop.CreateDefault(
             activeRuntime,
             logger,
+            profiles,
+            _hidHide,
+            GetHidHideDevicePaths,
             _controllerBroker,
             _mouseBroker);
 
@@ -83,7 +93,8 @@ public sealed class ServerService : IAsyncDisposable
             () => new ServerInputStatus(
                 _physicalControllers.GetStatus(),
                 _mouseInput.GetStatus()),
-            () => _activeClients.GetSteamInputStatus());
+            () => _activeClients.GetSteamInputStatus(),
+            () => _activeClients.RefreshHidHide());
     }
 
     internal IReadOnlyCollection<ConnectedClient> Clients => _sessions.Clients;
@@ -154,6 +165,7 @@ public sealed class ServerService : IAsyncDisposable
             await IgnoreCancellationAsync(orchestrationTask).ConfigureAwait(false);
             await _physicalControllers.DisposeAsync().ConfigureAwait(false);
             await _mouseInput.DisposeAsync().ConfigureAwait(false);
+            _hidHide?.Clear();
             await DisposeConnectionsAsync().ConfigureAwait(false);
             await DisposeForwardingAsync().ConfigureAwait(false);
         }
@@ -170,6 +182,7 @@ public sealed class ServerService : IAsyncDisposable
     {
         await _physicalControllers.DisposeAsync().ConfigureAwait(false);
         await _mouseInput.DisposeAsync().ConfigureAwait(false);
+        _hidHide?.Clear();
         await DisposeConnectionsAsync().ConfigureAwait(false);
         await DisposeForwardingAsync().ConfigureAwait(false);
     }
@@ -192,6 +205,42 @@ public sealed class ServerService : IAsyncDisposable
         await _controllerPipes.DisposeAsync().ConfigureAwait(false);
         await _controllerBroker.DisposeAsync().ConfigureAwait(false);
         await _mouseBroker.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private IReadOnlyList<string> GetHidHideDevicePaths(ActiveClientRegistryStatus status, Guid clientId)
+    {
+        _ = status;
+        if (_hidHideDevices is null)
+        {
+            return [];
+        }
+
+        HashSet<string> devices = new(StringComparer.OrdinalIgnoreCase);
+        foreach (ControllerPipeStatus pipe in _controllerPipes.GetStatus())
+        {
+            if (pipe.ClientId != clientId)
+            {
+                continue;
+            }
+
+            foreach (ClientControllerStatus controller in pipe.Controllers)
+            {
+                if (_hidHideDevices.FindDeviceInstancePath(GetControllerPath(controller.PhysicalControllerId)) is { } path)
+                {
+                    _ = devices.Add(path);
+                }
+            }
+        }
+
+        return [.. devices];
+    }
+
+    private static string? GetControllerPath(string physicalControllerId)
+    {
+        const string Prefix = "path:";
+        return physicalControllerId.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase)
+            ? physicalControllerId[Prefix.Length..]
+            : null;
     }
 
     private void TrackConnection(ServerConnectionHandle connection)

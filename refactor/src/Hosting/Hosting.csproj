@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Forwarding\Forwarding.csproj" />
+    <ProjectReference Include="..\HidHide\HidHide.csproj" />
     <ProjectReference Include="..\Inputs\RawInput\Inputs.RawInput.csproj" />
     <ProjectReference Include="..\Inputs\Sdl\Inputs.Sdl.csproj" />
     <ProjectReference Include="..\Outputs\Teensy\Outputs.Teensy.csproj" />

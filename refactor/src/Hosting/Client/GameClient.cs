@@ -327,7 +327,7 @@ public sealed class GameClient(
         GameProfile? profile = profiles.GetProfile(profileId);
         return profile?.SteamAppId is uint profileAppId
             ? ValidateSteamAppId(profileAppId)
-            : SteamInputClient.ResolveAppIdFromEnvironment();
+            : SteamInputClient.ResolveAppId();
     }
 
     private static uint ValidateSteamAppId(uint appId)

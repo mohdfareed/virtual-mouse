@@ -23,7 +23,8 @@ internal sealed class ServerSessions(
     MouseBroker mouseForwarding,
     ControllerPipeSessions controllerPipes,
     Func<ServerInputStatus>? getInputStatus = null,
-    Func<ServerSteamInputStatus>? getSteamInputStatus = null)
+    Func<ServerSteamInputStatus>? getSteamInputStatus = null,
+    Action? routeStateChanged = null)
 {
     private readonly ConcurrentDictionary<Guid, ConnectedClient> _clients = [];
 
@@ -107,6 +108,7 @@ internal sealed class ServerSessions(
     {
         _ = GetClient(clientId);
         controllerPipes.RegisterControllers(clientId, controllers);
+        routeStateChanged?.Invoke();
         return Task.CompletedTask;
     }
 
@@ -115,6 +117,7 @@ internal sealed class ServerSessions(
         IReadOnlyList<ObservedGameProcess> processes)
     {
         runtime.UpdateClient(clientId, processes);
+        routeStateChanged?.Invoke();
         return Task.CompletedTask;
     }
 

@@ -33,6 +33,7 @@
 
   <Folder Name="/refactor/src/">
     <Project Path="refactor/src/Forwarding/Forwarding.csproj" />
+    <Project Path="refactor/src/HidHide/HidHide.csproj" />
     <Project Path="refactor/src/Hosting/Hosting.csproj" />
     <Project Path="refactor/src/Inputs/RawInput/Inputs.RawInput.csproj" />
     <Project Path="refactor/src/Inputs/Sdl/Inputs.Sdl.csproj" />

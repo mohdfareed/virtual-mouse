@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using VirtualMouse.Steam.GameCatalog;
 
 namespace VirtualMouse.Steam;
 
@@ -60,7 +61,7 @@ public sealed class SteamInputClient(Func<Uri, CancellationToken, ValueTask>? op
     }
 
     /// <summary>Reads the Steam app id exposed to a Steam-launched process.</summary>
-    public static uint? ResolveAppIdFromEnvironment()
+    public static uint? ResolveAppId()
     {
         return TryParseAppId(Environment.GetEnvironmentVariable("SteamAppId")) ??
             TryParseAppId(Environment.GetEnvironmentVariable("SteamGameId"));

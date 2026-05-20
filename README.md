@@ -2,18 +2,6 @@
 
 Project for local input forwarding transports.
 
-## Projects
-
-- `cli`: CLI harness
-- `firmware`: microcontroller firmware source
-- `scripts`: build, test, deployment, and CLI scripts
-- `src/Inputs`: input source contracts, models, and implementations
-- `src/Outputs`: output contracts, models, and implementations
-- `src/Hosting`: local forwarding host/control process primitives
-- `src/SteamInput`: Steam Input control helpers
-- `cli/Tools`: CLI-only diagnostics and benchmark helpers
-- `tests`: unit and integration tests
-
 ## Scripts
 
 - `.\scripts\build.ps1` - build and format solution
@@ -36,16 +24,16 @@ hot paths:
 
 ## TODO
 
-- [ ] HidHide integration for physical controller blocking during xpad emulation.
-- [ ] Rename project and merge refactored project, add docs, and update README.
-- [ ] SDL-VIIPER DS4 support, and feedback capabilities.
-  - [ ] touchpad, light-bar RGB, flash timing, trigger rumble
 - [ ] Keyboard shortcuts support.
   - Toggle mouse output, motion output, Steam Input forcing
+- [ ] Rename project and merge refactored project, add docs, and update README.
+- [ ] SDL-VIIPER DS4 support with gyro integration.
+- [ ] Touchpad support and feedback capabilities.
+  - Light-bar RGB, flash timing, trigger rumble
 - [ ] Implement proper Steam Input controller identification.
   - Current implementation only support a single physical instance per controller model.
   - All Steam Input clients use VID/PID-based identification to pair with physical controllers.
   - Since all controllers of the same model share the same VID/PID, only one instance per model will be paired with all clients.
-- [ ] Teensy output architecture and firmware.
+- [ ] Teensy output and firmware.
 - [ ] Packaging and deployment with install script and self-update (auto?).
 - [ ] Versioning, machine-readable diagnostics, and richer observability.

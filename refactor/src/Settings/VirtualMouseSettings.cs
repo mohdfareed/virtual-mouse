@@ -25,6 +25,9 @@ public sealed class VirtualMouseSettings
     /// <summary>Steam integration settings.</summary>
     public SteamSettings Steam { get; set; } = new();
 
+    /// <summary>HidHide device firewall settings.</summary>
+    public HidHideSettings HidHide { get; set; } = new();
+
     /// <summary>Configured game profiles by profile id.</summary>
     public Dictionary<string, GameProfile> Games { get; } = [];
 }
@@ -37,6 +40,17 @@ public sealed class SteamSettings
 
     /// <summary>Default Steam ROM Manager manifest export path.</summary>
     public string? SrmExportPath { get; set; }
+}
+
+/// <summary>HidHide device firewall settings.</summary>
+public sealed class HidHideSettings
+{
+    /// <summary>Configuration section name for HidHide settings.</summary>
+    public const string SectionName = VirtualMouseSettings.SectionName + ":HidHide";
+
+    /// <summary>HidHide command-line executable path.</summary>
+    public string CliPath { get; set; } =
+        @"C:\Program Files\Nefarius Software Solutions\HidHide\x64\HidHideCLI.exe";
 }
 
 /// <summary>VIIPER output settings.</summary>

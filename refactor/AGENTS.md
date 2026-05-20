@@ -142,6 +142,12 @@
 - Keep refactor input/output adapters in `refactor/src/Inputs` and
   `refactor/src/Outputs`. Do not reference legacy adapter projects from
   refactor projects.
+- Keep HidHide integration in `refactor/src/HidHide`. Hosting may route active
+  controller route identities and receiver executable paths into HidHide, but
+  profile settings should not contain HidHide device instance paths.
+- HidHide should hide physical controllers automatically for active controller
+  routes that are forwarding to a VIIPER controller output. Derive the physical
+  device from the route's physical controller id, not from user-entered paths.
 - Keep Teensy wired as an output adapter placeholder until the transport is
   designed. It may expose selectable output options, but send operations should
   fail explicitly with `NotImplementedException`.

@@ -13,6 +13,7 @@ internal static class SettingsValidation
 
         List<string> failures = [];
         ValidateViiper(settings.Viiper, failures);
+        ValidateHidHide(settings.HidHide, failures);
         ValidateProfiles(settings.Games, failures);
 
         if (failures.Count > 0)
@@ -31,6 +32,14 @@ internal static class SettingsValidation
         if (settings.Port is < 1 or > 65_535)
         {
             failures.Add("viiper:port must be between 1 and 65535.");
+        }
+    }
+
+    private static void ValidateHidHide(HidHideSettings settings, List<string> failures)
+    {
+        if (string.IsNullOrWhiteSpace(settings.CliPath))
+        {
+            failures.Add("hidhide:cliPath is required.");
         }
     }
 

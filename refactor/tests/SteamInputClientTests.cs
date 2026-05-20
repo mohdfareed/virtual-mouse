@@ -67,7 +67,7 @@ public sealed class SteamInputClientTests
             Environment.SetEnvironmentVariable("SteamAppId", "456");
             Environment.SetEnvironmentVariable("SteamGameId", "789");
 
-            Assert.AreEqual<uint?>(456, SteamInputClient.ResolveAppIdFromEnvironment());
+            Assert.AreEqual<uint?>(456, SteamInputClient.ResolveAppId());
         }
         finally
         {

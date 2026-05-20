@@ -30,6 +30,8 @@ public static class SettingsServices
             configuration.GetSection(LoggingSettings.SectionName));
         _ = services.Configure<ViiperSettings>(
             configuration.GetSection(ViiperSettings.SectionName));
+        _ = services.Configure<HidHideSettings>(
+            configuration.GetSection(HidHideSettings.SectionName));
         return services;
     }
 }

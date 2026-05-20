@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using VirtualMouse.Forwarding;
+using VirtualMouse.HidHide;
 using VirtualMouse.Outputs.Teensy;
 using VirtualMouse.Outputs.Viiper;
 using VirtualMouse.Runtime;
@@ -19,6 +20,13 @@ public static class ServerServices
     public static IServiceCollection AddApplicationServer(this IServiceCollection services)
     {
         _ = services.AddSingleton<ActiveClientRegistry>();
+        _ = services.AddSingleton<IHidHideCommandRunner>(static services =>
+            new HidHideCliRunner(services.GetRequiredService<IOptions<HidHideSettings>>().Value.CliPath));
+        _ = services.AddSingleton<HidHideDeviceCatalog>();
+        _ = services.AddSingleton(static services =>
+            new HidHideProfileFirewall(
+                services.GetRequiredService<IHidHideCommandRunner>(),
+                services.GetRequiredService<ILogger<HidHideProfileFirewall>>()));
         _ = services.AddSingleton(static services =>
         {
             ViiperSettings settings = services.GetRequiredService<IOptions<ViiperSettings>>().Value;
@@ -49,6 +57,8 @@ public static class ServerServices
                 activeClients: null,
                 services.GetRequiredService<ControllerBroker>(),
                 services.GetRequiredService<MouseBroker>(),
+                services.GetRequiredService<HidHideProfileFirewall>(),
+                services.GetRequiredService<HidHideDeviceCatalog>(),
                 viiper.ReclaimDevicesAsync);
         });
         return services;

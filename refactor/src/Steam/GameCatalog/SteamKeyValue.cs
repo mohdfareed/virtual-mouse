@@ -5,7 +5,7 @@ using System.IO;
 using System.Text;
 using ValveKeyValue;
 
-namespace VirtualMouse.Steam;
+namespace VirtualMouse.Steam.GameCatalog;
 
 internal sealed class SteamKeyValue
 {
@@ -25,6 +25,9 @@ internal sealed class SteamKeyValue
 
 internal static class SteamKeyValueParser
 {
+    // MARK: Publics
+    // ========================================================================
+
     public static SteamKeyValue ParseText(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -38,6 +41,9 @@ internal static class SteamKeyValueParser
         using MemoryStream stream = new(data, writable: false);
         return Parse(stream, KVSerializationFormat.KeyValues1Binary);
     }
+
+    // MARK: Privates
+    // ========================================================================
 
     private static SteamKeyValue Parse(Stream stream, KVSerializationFormat format)
     {

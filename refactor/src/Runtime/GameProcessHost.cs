@@ -68,6 +68,24 @@ public static class GameProcessHost
         return [.. processes.Values];
     }
 
+    /// <summary>Gets a process executable path when the platform exposes it.</summary>
+    public static string? GetExecutablePath(int processId)
+    {
+        try
+        {
+            using Process process = Process.GetProcessById(processId);
+            return process.MainModule?.FileName;
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or
+                InvalidOperationException or
+                NotSupportedException or
+                System.ComponentModel.Win32Exception)
+        {
+            return null;
+        }
+    }
+
     // MARK: Ending
     // ========================================================================
 

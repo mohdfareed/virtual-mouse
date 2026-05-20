@@ -97,4 +97,7 @@ internal static partial class HostingLog
 
     [LoggerMessage(EventId = 30, Level = LogLevel.Information, Message = "Restored server registration for {ProfileId} client={ClientId}")]
     public static partial void RestoredServerRegistration(ILogger logger, string profileId, Guid? clientId);
+
+    [LoggerMessage(EventId = 34, Level = LogLevel.Warning, Message = "HidHide update failed for client {ClientId}: {Message}")]
+    public static partial void HidHideUpdateFailed(ILogger logger, Guid? clientId, string message);
 }

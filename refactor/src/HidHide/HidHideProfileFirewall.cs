@@ -1,0 +1,182 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.Extensions.Logging;
+
+namespace VirtualMouse.HidHide;
+
+/// <summary>Applies one profile HidHide scope and restores previous state.</summary>
+public sealed class HidHideProfileFirewall(
+    IHidHideCommandRunner runner,
+    ILogger<HidHideProfileFirewall>? logger = null) : IDisposable
+{
+    private HidHideSnapshot? _snapshot;
+    private HidHideScope? _scope;
+    private bool _disposed;
+
+    /// <summary>Applies a profile scope using HidHide inverse mode.</summary>
+    public void Apply(HidHideScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        ThrowIfDisposed();
+
+        if (scope.IsEmpty)
+        {
+            Clear();
+            return;
+        }
+
+        if (_scope == scope)
+        {
+            return;
+        }
+
+        Clear();
+        HidHideSnapshot snapshot = HidHideSnapshot.Capture(runner, scope);
+        try
+        {
+            List<string> args = ["--inv-on", "--cloak-on"];
+            foreach (string device in scope.DeviceInstancePaths)
+            {
+                args.Add("--dev-hide");
+                args.Add(device);
+            }
+
+            foreach (string app in scope.ApplicationPaths)
+            {
+                args.Add("--app-reg");
+                args.Add(app);
+            }
+
+            _ = runner.Run(args);
+            _snapshot = snapshot;
+            _scope = scope;
+            HidHideLog.Applied(logger, scope.DeviceInstancePaths.Count, scope.ApplicationPaths.Count);
+        }
+        catch
+        {
+            snapshot.Restore(runner);
+            throw;
+        }
+    }
+
+    /// <summary>Restores the previous HidHide state.</summary>
+    public void Clear()
+    {
+        ThrowIfDisposed();
+        if (_snapshot is null)
+        {
+            return;
+        }
+
+        _snapshot.Restore(runner);
+        HidHideLog.Restored(logger);
+        _snapshot = null;
+        _scope = null;
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        Clear();
+        _disposed = true;
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+    }
+}
+
+internal sealed record HidHideSnapshot(
+    string CloakState,
+    string InverseState,
+    IReadOnlyDictionary<string, bool> HiddenDevices,
+    IReadOnlyDictionary<string, bool> RegisteredApps)
+{
+    public static HidHideSnapshot Capture(IHidHideCommandRunner runner, HidHideScope scope)
+    {
+        string hiddenDevices = runner.Run(["--dev-list"]);
+        string registeredApps = runner.Run(["--app-list"]);
+
+        return new HidHideSnapshot(
+            runner.Run(["--cloak-state"]),
+            runner.Run(["--inv-state"]),
+            scope.DeviceInstancePaths.ToDictionary(
+                static device => device,
+                device => ContainsLineValue(hiddenDevices, device),
+                StringComparer.OrdinalIgnoreCase),
+            scope.ApplicationPaths.ToDictionary(
+                static app => app,
+                app => ContainsLineValue(registeredApps, app),
+                StringComparer.OrdinalIgnoreCase));
+    }
+
+    public void Restore(IHidHideCommandRunner runner)
+    {
+        List<string> args = [];
+        foreach ((string app, bool registered) in RegisteredApps)
+        {
+            args.Add(registered ? "--app-reg" : "--app-unreg");
+            args.Add(app);
+        }
+
+        foreach ((string device, bool hidden) in HiddenDevices)
+        {
+            args.Add(hidden ? "--dev-hide" : "--dev-unhide");
+            args.Add(device);
+        }
+
+        args.Add(IsOn(CloakState) ? "--cloak-on" : "--cloak-off");
+        args.Add(IsOn(InverseState) ? "--inv-on" : "--inv-off");
+        _ = runner.Run(args);
+    }
+
+    private static bool ContainsLineValue(string output, string value)
+    {
+        return output.Contains(value, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsOn(string value)
+    {
+        return value.Contains("yes", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("true", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("on", StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+internal static partial class HidHideLog
+{
+    private static readonly Action<ILogger, int, int, Exception?> AppliedMessage =
+        LoggerMessage.Define<int, int>(
+            LogLevel.Information,
+            new EventId(1, nameof(Applied)),
+            "Applied HidHide scope: devices={DeviceCount} applications={ApplicationCount}");
+
+    private static readonly Action<ILogger, Exception?> RestoredMessage =
+        LoggerMessage.Define(
+            LogLevel.Information,
+            new EventId(2, nameof(Restored)),
+            "Restored HidHide state.");
+
+    public static void Applied(ILogger? logger, int deviceCount, int applicationCount)
+    {
+        if (logger is not null)
+        {
+            AppliedMessage(logger, deviceCount, applicationCount, null);
+        }
+    }
+
+    public static void Restored(ILogger? logger)
+    {
+        if (logger is not null)
+        {
+            RestoredMessage(logger, null);
+        }
+    }
+}
