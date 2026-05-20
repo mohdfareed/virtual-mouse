@@ -128,7 +128,9 @@ internal sealed class AppMenu(
             NativeMenuItem.Disabled(
                 $"controller output: {AppText.Enabled(status.Forwarding.ControllerOutputEnabled)}"),
             NativeMenuItem.Disabled(
-                $"physical motion: {AppText.Enabled(status.Forwarding.PhysicalMotionEnabled)}"),
+                $"motion: {AppText.Enabled(status.Forwarding.PhysicalMotionEnabled)}"),
+            NativeMenuItem.Disabled(
+                $"pointer: {AppText.Enabled(status.MouseForwarding.PointerOutputEnabled)}"),
         ];
 
         if (status.Forwarding.Slots.Count == 0)
@@ -144,8 +146,8 @@ internal sealed class AppMenu(
                 [
                     NativeMenuItem.Disabled($"output: {AppText.Output(slot.Output)}"),
                     NativeMenuItem.Disabled($"physical: {AppText.Connected(slot.HasPhysicalEndpoint)}"),
-                    NativeMenuItem.Disabled($"steam endpoints: {slot.SteamEndpointCount}"),
-                    NativeMenuItem.Disabled($"active steam: {AppText.YesNo(slot.HasActiveSteamEndpoint)}"),
+                    NativeMenuItem.Disabled($"client endpoints: {slot.ClientEndpointCount}"),
+                    NativeMenuItem.Disabled($"active client: {AppText.YesNo(slot.HasActiveClientEndpoint)}"),
                 ]));
         }
 

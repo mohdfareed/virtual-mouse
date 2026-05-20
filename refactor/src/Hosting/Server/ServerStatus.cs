@@ -18,7 +18,7 @@ public sealed record ServerStatus(int ConnectedClientCount)
 
     /// <summary>Current mouse forwarding status.</summary>
     public MouseBrokerStatus MouseForwarding { get; init; } =
-        new(null, MouseOutputEnabled: true, OutputConnected: false, MouseOutput.None);
+        new(null, MouseOutputEnabled: true, PointerOutputEnabled: true, OutputConnected: false, MouseOutput.None);
 
     /// <summary>Server-owned input pump status.</summary>
     public ServerInputStatus Inputs { get; init; } =

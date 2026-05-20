@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using Microsoft.Extensions.Logging;
 using VirtualMouse.Settings.Profiles;
 
@@ -28,8 +29,47 @@ public sealed class VirtualMouseSettings
     /// <summary>HidHide device firewall settings.</summary>
     public HidHideSettings HidHide { get; set; } = new();
 
+    /// <summary>Global keyboard shortcuts handled by the server.</summary>
+    public Collection<ShortcutEntry> Shortcuts { get; } = [];
+
     /// <summary>Configured game profiles by profile id.</summary>
     public Dictionary<string, GameProfile> Games { get; } = [];
+}
+
+/// <summary>Shortcut target controlled by a keyboard shortcut.</summary>
+public enum ShortcutTarget
+{
+    /// <summary>Controller motion contribution.</summary>
+    Motion,
+
+    /// <summary>Virtual pointer report forwarding.</summary>
+    Pointer,
+}
+
+/// <summary>Shortcut target state.</summary>
+public enum ShortcutValue
+{
+    /// <summary>Enable the target.</summary>
+    Enabled,
+
+    /// <summary>Disable the target.</summary>
+    Disabled,
+}
+
+/// <summary>Global shortcut binding.</summary>
+public sealed class ShortcutEntry
+{
+    /// <summary>Display name for diagnostics.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Keyboard combination such as Ctrl+Alt+F13.</summary>
+    public string Keys { get; set; } = "";
+
+    /// <summary>Target controlled by this shortcut.</summary>
+    public ShortcutTarget? Target { get; set; }
+
+    /// <summary>State applied when the shortcut is pressed.</summary>
+    public ShortcutValue? Value { get; set; }
 }
 
 /// <summary>Steam integration settings.</summary>

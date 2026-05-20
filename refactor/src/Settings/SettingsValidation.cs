@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using VirtualMouse.Settings.Profiles;
 
@@ -14,6 +15,7 @@ internal static class SettingsValidation
         List<string> failures = [];
         ValidateViiper(settings.Viiper, failures);
         ValidateHidHide(settings.HidHide, failures);
+        ValidateShortcuts(settings.Shortcuts, failures);
         ValidateProfiles(settings.Games, failures);
 
         if (failures.Count > 0)
@@ -40,6 +42,36 @@ internal static class SettingsValidation
         if (string.IsNullOrWhiteSpace(settings.CliPath))
         {
             failures.Add("hidhide:cliPath is required.");
+        }
+    }
+
+    private static void ValidateShortcuts(
+        Collection<ShortcutEntry> shortcuts,
+        List<string> failures)
+    {
+        HashSet<string> keys = new(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < shortcuts.Count; i++)
+        {
+            ShortcutEntry shortcut = shortcuts[i];
+            string prefix = $"shortcuts:{i}";
+            if (string.IsNullOrWhiteSpace(shortcut.Keys))
+            {
+                failures.Add($"{prefix}:keys is required.");
+            }
+            else if (!keys.Add(shortcut.Keys.Trim()))
+            {
+                failures.Add($"{prefix}:keys duplicates another shortcut.");
+            }
+
+            if (!shortcut.Target.HasValue)
+            {
+                failures.Add($"{prefix}:target is required.");
+            }
+
+            if (!shortcut.Value.HasValue)
+            {
+                failures.Add($"{prefix}:value is required.");
+            }
         }
     }
 

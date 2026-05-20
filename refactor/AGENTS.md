@@ -94,10 +94,10 @@
 - Keep canonical hot-path report models and source-to-output mappers in
   `Forwarding`. Adapter projects such as `Inputs/Sdl` and `Outputs/Viiper`
   should translate between device libraries and those canonical models only.
-- Model each controller as one logical slot with a Steam endpoint and a physical
-  endpoint. Prefer Steam Input for every readable/writable feature, and use the
-  physical endpoint only when the Steam endpoint is unavailable or does not
-  support that feature.
+- Model each controller as one logical slot with a client-visible endpoint and
+  a physical endpoint. Prefer the client-visible endpoint for every
+  readable/writable feature, and use the physical endpoint only when the client
+  endpoint is unavailable or does not support that feature.
 - Keep future controller features such as LEDs, touchpads, adaptive triggers,
   and similar device-specific behavior as feature groups on the logical
   controller slot. Do not create per-feature route/session abstractions unless a
@@ -106,6 +106,11 @@
   the whole physical controller endpoint. Physical motion is the first such
   gate; the physical endpoint remains available for matching, feedback fallback,
   and other supported feature groups.
+- Keyboard shortcuts are global server settings, not per-game profile settings.
+  Keep shortcut targets limited to direct state gates. Steam Input owns hold,
+  toggle, action set, action layer, and game-context behavior.
+- Shortcut-driven `Pointer` and `Motion` changes must not disconnect output
+  devices. They only stop forwarding reports or feature groups.
 - Controller output devices stay connected while any attached client endpoint
   wants that output kind. Active-client state gates report forwarding, not
   virtual-device lifetime. Dispose the output only when no attached clients need

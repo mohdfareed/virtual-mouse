@@ -99,8 +99,9 @@ internal static class ServerStatusCommand
 
         PrintSection(sb, "Forwarding");
         PrintItem(sb, "controllerOutput", status.Forwarding.ControllerOutputEnabled);
-        PrintItem(sb, "physicalMotion", status.Forwarding.PhysicalMotionEnabled);
+        PrintItem(sb, "motion", status.Forwarding.PhysicalMotionEnabled);
         PrintItem(sb, "mouseOutput", status.MouseForwarding.MouseOutputEnabled);
+        PrintItem(sb, "pointer", status.MouseForwarding.PointerOutputEnabled);
         PrintItem(sb, "mouseConnected", status.MouseForwarding.OutputConnected);
         PrintItem(sb, "mouseKind", status.MouseForwarding.Output);
 
@@ -115,11 +116,11 @@ internal static class ServerStatusCommand
             PrintLine(sb,
                 $"{FormatControllerId(slot.ControllerId)} " +
                 $"output={FormatOutput(slot.OutputConnected, slot.Output)} " +
-                $"steam={slot.SteamEndpointCount} " +
-                $"activeSteam={slot.HasActiveSteamEndpoint} " +
+                $"clients={slot.ClientEndpointCount} " +
+                $"activeClient={slot.HasActiveClientEndpoint} " +
                 $"physical={FormatEndpoint(slot.HasPhysicalEndpoint)}");
             PrintLine(sb, $"physicalFeatures: {FormatFeatures(slot.PhysicalFeatures)}", 4);
-            PrintLine(sb, $"activeSteamFeatures: {FormatFeatures(slot.ActiveSteamFeatures)}", 4);
+            PrintLine(sb, $"activeClientFeatures: {FormatFeatures(slot.ActiveClientFeatures)}", 4);
         }
 
         PrintSection(sb, "Controller Pipes");

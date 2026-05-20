@@ -48,6 +48,32 @@ public sealed class MouseBrokerTests
         Assert.AreEqual(MouseButtons.Left, factory.Outputs[0].Reports[0].Buttons);
     }
 
+    /// <summary>Pointer gate stops reports without disconnecting the output device.</summary>
+    [TestMethod]
+    public void PointerCanBeDisabledWithoutDisconnectingOutput()
+    {
+        Guid clientId = Guid.NewGuid();
+        FakeMouseOutputFactory factory = new();
+        using MouseBroker broker = new(factory);
+
+        broker.RegisterClient(clientId, MouseOutput.Viiper);
+        broker.SetActiveClient(clientId);
+        broker.Send(new MouseInput(new MouseReport(MouseButtons.Left, 1, 0, 0), "mouse"));
+
+        broker.SetPointerOutputEnabled(false);
+        broker.Send(new MouseInput(new MouseReport(MouseButtons.Left, 2, 0, 0), "mouse"));
+
+        Assert.IsFalse(factory.Outputs[0].Disposed);
+        Assert.HasCount(2, factory.Outputs[0].Reports);
+        Assert.AreEqual(MouseReport.Empty, factory.Outputs[0].Reports[1]);
+
+        broker.SetPointerOutputEnabled(true);
+        broker.Send(new MouseInput(new MouseReport(MouseButtons.None, 3, 0, 0), "mouse"));
+
+        Assert.HasCount(3, factory.Outputs[0].Reports);
+        Assert.AreEqual(3, factory.Outputs[0].Reports[2].DeltaX);
+    }
+
     /// <summary>Mouse reports filtered by the active output are not forwarded.</summary>
     [TestMethod]
     public void SkipsReportsFilteredByOutput()

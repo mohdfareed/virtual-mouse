@@ -10,6 +10,7 @@
     <Project Path="src/Outputs/Viiper/Outputs.Viiper.csproj" />
     <Project Path="src/Runtime/Runtime.csproj" />
     <Project Path="src/Settings/Settings.csproj" />
+    <Project Path="src/Shortcuts/Shortcuts.csproj" />
     <Project Path="src/Steam/Steam.csproj" />
   </Folder>
 

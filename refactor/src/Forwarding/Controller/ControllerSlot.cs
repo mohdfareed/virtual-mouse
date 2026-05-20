@@ -14,28 +14,28 @@ internal sealed class ControllerSlot(ControllerId controllerId, Action<Controlle
 
     public ControllerEndpointState? Physical { get; set; }
 
-    public Dictionary<ControllerEndpointId, ControllerEndpointState> Steam { get; } = [];
+    public Dictionary<ControllerEndpointId, ControllerEndpointState> ClientEndpoints { get; } = [];
 
     public IControllerOutput? Output { get; private set; }
 
     public ControllerOutput OutputKind { get; private set; }
 
-    public bool HasEndpoints => Physical.HasValue || Steam.Count != 0;
+    public bool HasEndpoints => Physical.HasValue || ClientEndpoints.Count != 0;
 
     // MARK: Endpoints
     // ========================================================================
 
-    public bool HasSteam(Guid? clientId)
+    public bool HasClient(Guid? clientId)
     {
-        return clientId.HasValue && FindSteam(clientId.Value) is not null;
+        return clientId.HasValue && FindClient(clientId.Value) is not null;
     }
 
-    public void RemoveSteam(Guid clientId)
+    public void RemoveClient(Guid clientId)
     {
-        foreach (ControllerEndpointId endpointId in Steam.Keys.Where(id => id.ClientId == clientId).ToArray())
+        foreach (ControllerEndpointId endpointId in ClientEndpoints.Keys.Where(id => id.ClientId == clientId).ToArray())
         {
             StopFeedbackTarget(new FeedbackTarget(endpointId));
-            _ = Steam.Remove(endpointId);
+            _ = ClientEndpoints.Remove(endpointId);
         }
     }
 
@@ -47,20 +47,24 @@ internal sealed class ControllerSlot(ControllerId controllerId, Action<Controlle
 
     public bool TryGetMergedState(
         Guid clientId,
+        ControllerFeatures clientFeatures,
         ControllerFeatures physicalFallbackFeatures,
         out ControllerState state)
     {
         state = default;
-        if (FindSteam(clientId) is not { } steam)
+        if (FindClient(clientId) is not { } client)
         {
             return false;
         }
 
         ControllerEndpointState? physical = Physical;
         state = new ControllerState(
-            Select(steam, physical, physicalFallbackFeatures, ControllerFeatures.StandardControls).Standard,
-            Select(steam, physical, physicalFallbackFeatures, ControllerFeatures.Motion).Motion,
-            Select(steam, physical, physicalFallbackFeatures, ControllerFeatures.Touchpad).Touchpad);
+            Select(client, physical, clientFeatures, physicalFallbackFeatures, ControllerFeatures.StandardControls)
+                .Standard,
+            Select(client, physical, clientFeatures, physicalFallbackFeatures, ControllerFeatures.Motion)
+                .Motion,
+            Select(client, physical, clientFeatures, physicalFallbackFeatures, ControllerFeatures.Touchpad)
+                .Touchpad);
         return true;
     }
 
@@ -87,9 +91,9 @@ internal sealed class ControllerSlot(ControllerId controllerId, Action<Controlle
         _feedbackTarget = target;
     }
 
-    public ControllerEndpointState? FindSteam(Guid clientId)
+    public ControllerEndpointState? FindClient(Guid clientId)
     {
-        foreach (KeyValuePair<ControllerEndpointId, ControllerEndpointState> endpoint in Steam)
+        foreach (KeyValuePair<ControllerEndpointId, ControllerEndpointState> endpoint in ClientEndpoints)
         {
             if (endpoint.Key.ClientId == clientId)
             {
@@ -194,7 +198,7 @@ internal sealed class ControllerSlot(ControllerId controllerId, Action<Controlle
             yield break;
         }
 
-        foreach (KeyValuePair<ControllerEndpointId, ControllerEndpointState> endpoint in Steam)
+        foreach (KeyValuePair<ControllerEndpointId, ControllerEndpointState> endpoint in ClientEndpoints)
         {
             if (endpoint.Key.ClientId == clientId && endpoint.Value.CanAccept(feedback))
             {
@@ -211,8 +215,8 @@ internal sealed class ControllerSlot(ControllerId controllerId, Action<Controlle
     private bool SendFeedback(FeedbackTarget target, ControllerFeedback feedback)
     {
         return target.EndpointId is { } endpointId
-            ? Steam.TryGetValue(endpointId, out ControllerEndpointState steam) &&
-            steam.TrySendFeedback(feedback)
+            ? ClientEndpoints.TryGetValue(endpointId, out ControllerEndpointState client) &&
+            client.TrySendFeedback(feedback)
             : Physical?.TrySendFeedback(feedback) ?? false;
     }
 
@@ -227,13 +231,14 @@ internal sealed class ControllerSlot(ControllerId controllerId, Action<Controlle
     }
 
     private static ControllerState Select(
-        ControllerEndpointState steam,
+        ControllerEndpointState client,
         ControllerEndpointState? physical,
+        ControllerFeatures clientFeatures,
         ControllerFeatures physicalFallbackFeatures,
         ControllerFeatures feature)
     {
-        return steam.Supports(feature)
-            ? steam.State
+        return (clientFeatures & feature) != 0 && client.Supports(feature)
+            ? client.State
             : physical is { } fallback &&
             (physicalFallbackFeatures & feature) != 0 &&
             fallback.Supports(feature)

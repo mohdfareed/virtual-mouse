@@ -9,6 +9,7 @@ using VirtualMouse.Outputs.Viiper;
 using VirtualMouse.Runtime;
 using VirtualMouse.Settings;
 using VirtualMouse.Settings.Profiles;
+using VirtualMouse.Shortcuts;
 using ForwardingMouseOutput = VirtualMouse.Forwarding.MouseOutput;
 
 namespace VirtualMouse.Hosting;
@@ -27,6 +28,7 @@ public static class ServerServices
             new HidHideProfileFirewall(
                 services.GetRequiredService<IHidHideCommandRunner>(),
                 services.GetRequiredService<ILogger<HidHideProfileFirewall>>()));
+        _ = services.AddSingleton<IKeyboardShortcutListener, GlobalKeyboardShortcutListener>();
         _ = services.AddSingleton(static services =>
         {
             ViiperSettings settings = services.GetRequiredService<IOptions<ViiperSettings>>().Value;
@@ -46,6 +48,7 @@ public static class ServerServices
             static services => services.GetRequiredService<ServerMouseOutputFactory>());
         _ = services.AddSingleton<ControllerBroker>();
         _ = services.AddSingleton<MouseBroker>();
+        _ = services.AddSingleton<ServerShortcutService>();
         _ = services.AddSingleton(static services =>
         {
             ViiperOutputFactory viiper = services.GetRequiredService<ViiperOutputFactory>();
@@ -59,6 +62,7 @@ public static class ServerServices
                 services.GetRequiredService<MouseBroker>(),
                 services.GetRequiredService<HidHideProfileFirewall>(),
                 services.GetRequiredService<HidHideDeviceCatalog>(),
+                services.GetRequiredService<ServerShortcutService>(),
                 viiper.ReclaimDevicesAsync);
         });
         return services;

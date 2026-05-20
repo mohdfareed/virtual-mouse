@@ -195,6 +195,11 @@ public sealed class GameClient(
         ClientRunState state,
         CancellationToken cancellationToken)
     {
+        if (state.Launch.ControllerOutput == ControllerOutput.None)
+        {
+            return;
+        }
+
         ClientControllerStreams streams = new(logger);
         await streams.StartAsync(client, state.Launch, cancellationToken).ConfigureAwait(false);
         state.ControllerStreams = streams;

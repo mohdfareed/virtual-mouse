@@ -11,9 +11,9 @@ public sealed class ControllerBrokerTests
 {
     private static readonly ControllerId ControllerId = new("physical-1");
 
-    /// <summary>Steam controls win while physical motion fills the missing feature group.</summary>
+    /// <summary>Client controls win while physical motion fills the missing feature group.</summary>
     [TestMethod]
-    public void ActiveSteamControlsMergeWithPhysicalMotion()
+    public void ActiveClientControlsMergeWithPhysicalMotion()
     {
         Guid clientId = Guid.NewGuid();
         FakeControllerOutputFactory factory = new();
@@ -36,9 +36,9 @@ public sealed class ControllerBrokerTests
         Assert.AreEqual(1, output.LastState.Motion?.GyroX);
     }
 
-    /// <summary>Steam motion wins over physical motion when both are present.</summary>
+    /// <summary>Client motion wins over physical motion when both are present.</summary>
     [TestMethod]
-    public void SteamMotionOverridesPhysicalMotion()
+    public void ClientMotionOverridesPhysicalMotion()
     {
         Guid clientId = Guid.NewGuid();
         FakeControllerOutputFactory factory = new();
@@ -89,6 +89,30 @@ public sealed class ControllerBrokerTests
         Assert.IsFalse(factory.SingleOutput.Disposed);
     }
 
+    /// <summary>Motion gating also suppresses motion from a physical controller exposed to the client.</summary>
+    [TestMethod]
+    public void MotionCanBeDisabledForClientEndpoint()
+    {
+        Guid clientId = Guid.NewGuid();
+        FakeControllerOutputFactory factory = new();
+        using ControllerBroker broker = new(factory);
+
+        broker.RegisterClient(clientId, ControllerOutput.Xbox360);
+        broker.SetActiveClient(clientId);
+        broker.UpdateClientController(
+            clientId,
+            ControllerId,
+            new ControllerState(Standard(ControllerButtons.South), Motion(2), null),
+            ControllerFeatures.StandardControls | ControllerFeatures.Motion);
+
+        Assert.AreEqual(2, factory.SingleOutput.LastState.Motion?.GyroX);
+
+        broker.SetPhysicalMotionEnabled(false);
+
+        Assert.IsNull(factory.SingleOutput.LastState.Motion);
+        Assert.IsFalse(factory.SingleOutput.Disposed);
+    }
+
     /// <summary>Physical disconnect clears fallback state without dropping a client-owned output.</summary>
     [TestMethod]
     public void PhysicalControllerRemovalClearsFallbackAndKeepsClientOutput()
@@ -120,7 +144,7 @@ public sealed class ControllerBrokerTests
         Assert.HasCount(1, status.Slots);
         Assert.IsFalse(status.Slots[0].HasPhysicalEndpoint);
         Assert.IsNull(status.Slots[0].PhysicalFeatures);
-        Assert.IsTrue(status.Slots[0].HasActiveSteamEndpoint);
+        Assert.IsTrue(status.Slots[0].HasActiveClientEndpoint);
 
         broker.UpdatePhysicalController(
             ControllerId,
@@ -152,7 +176,7 @@ public sealed class ControllerBrokerTests
 
     /// <summary>Client endpoint removal disconnects outputs with no remaining attached controller.</summary>
     [TestMethod]
-    public void ClientControllerRemovalDropsStaleSteamEndpoint()
+    public void ClientControllerRemovalDropsStaleClientEndpoint()
     {
         Guid clientId = Guid.NewGuid();
         FakeControllerOutputFactory factory = new();
@@ -172,17 +196,17 @@ public sealed class ControllerBrokerTests
         Assert.IsTrue(output.Disposed);
         ControllerBrokerStatus status = broker.GetStatus();
         Assert.HasCount(1, status.Slots);
-        Assert.AreEqual(0, status.Slots[0].SteamEndpointCount);
+        Assert.AreEqual(0, status.Slots[0].ClientEndpointCount);
         Assert.IsFalse(status.Slots[0].OutputConnected);
     }
 
-    /// <summary>Output feedback prefers the Steam endpoint and falls back to physical.</summary>
+    /// <summary>Output feedback prefers the client endpoint and falls back to physical.</summary>
     [TestMethod]
-    public void FeedbackUsesSteamThenPhysicalFallback()
+    public void FeedbackUsesClientThenPhysicalFallback()
     {
         Guid clientId = Guid.NewGuid();
         FakeControllerOutputFactory factory = new();
-        FakeFeedbackSink steamFeedback = new(accept: true);
+        FakeFeedbackSink clientFeedback = new(accept: true);
         FakeFeedbackSink physicalFeedback = new(accept: true);
         using ControllerBroker broker = new(factory);
 
@@ -198,17 +222,17 @@ public sealed class ControllerBrokerTests
             ControllerId,
             new ControllerState(Standard(ControllerButtons.South), null, null),
             ControllerFeatures.StandardControls | ControllerFeatures.Rumble,
-            steamFeedback);
+            clientFeedback);
 
         factory.SingleOutput.EmitFeedback(new ControllerFeedback(new ControllerRumble(10, 20)));
-        Assert.HasCount(1, steamFeedback.Feedback);
+        Assert.HasCount(1, clientFeedback.Feedback);
         Assert.IsEmpty(physicalFeedback.Feedback);
 
-        steamFeedback.Accept = false;
+        clientFeedback.Accept = false;
         factory.SingleOutput.EmitFeedback(new ControllerFeedback(new ControllerRumble(30, 40)));
-        Assert.HasCount(3, steamFeedback.Feedback);
+        Assert.HasCount(3, clientFeedback.Feedback);
         Assert.HasCount(1, physicalFeedback.Feedback);
-        Assert.AreEqual((ushort)0, steamFeedback.Feedback[2].Rumble?.LowFrequency);
+        Assert.AreEqual((ushort)0, clientFeedback.Feedback[2].Rumble?.LowFrequency);
     }
 
     /// <summary>Held feedback is replayed when the active endpoint reconnects.</summary>
@@ -374,8 +398,8 @@ public sealed class ControllerBrokerTests
         Assert.HasCount(1, status.Slots);
         Assert.AreEqual(ControllerOutput.Xbox360, status.Slots[0].Output);
         Assert.IsTrue(status.Slots[0].OutputConnected);
-        Assert.AreEqual(1, status.Slots[0].SteamEndpointCount);
-        Assert.AreEqual(ControllerFeatures.StandardControls, status.Slots[0].ActiveSteamFeatures);
+        Assert.AreEqual(1, status.Slots[0].ClientEndpointCount);
+        Assert.AreEqual(ControllerFeatures.StandardControls, status.Slots[0].ActiveClientFeatures);
 
         broker.SetActiveClient(null);
         Assert.IsFalse(output.Disposed);

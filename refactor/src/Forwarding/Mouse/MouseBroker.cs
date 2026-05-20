@@ -32,6 +32,7 @@ public interface IMouseOutputFactory
 public sealed record MouseBrokerStatus(
     Guid? ActiveClientId,
     bool MouseOutputEnabled,
+    bool PointerOutputEnabled,
     bool OutputConnected,
     MouseOutput Output);
 
@@ -42,6 +43,7 @@ public sealed class MouseBroker(IMouseOutputFactory outputFactory) : IDisposable
     private readonly Dictionary<Guid, MouseOutput> _clients = [];
     private Guid? _activeClientId;
     private bool _mouseOutputEnabled = true;
+    private bool _pointerOutputEnabled = true;
     private IMouseOutput? _output;
     private MouseOutput _outputKind;
     private bool _disposed;
@@ -116,6 +118,36 @@ public sealed class MouseBroker(IMouseOutputFactory outputFactory) : IDisposable
         DisposeOutput(dispose);
     }
 
+    /// <summary>Enables or disables pointer reports without disconnecting the output device.</summary>
+    public void SetPointerOutputEnabled(bool enabled)
+    {
+        ThrowIfDisposed();
+        IMouseOutput? output = null;
+
+        lock (_gate)
+        {
+            if (_pointerOutputEnabled == enabled)
+            {
+                return;
+            }
+
+            _pointerOutputEnabled = enabled;
+            if (!enabled)
+            {
+                output = _output;
+            }
+        }
+
+        if (output is not null)
+        {
+            ValueTask release = output.SendAsync(MouseReport.Empty);
+            if (!release.IsCompletedSuccessfully)
+            {
+                _ = ObserveSendAsync(release);
+            }
+        }
+    }
+
     /// <summary>Forwards one mouse report when the active profile has mouse output.</summary>
     public void Send(in MouseInput input)
     {
@@ -124,7 +156,7 @@ public sealed class MouseBroker(IMouseOutputFactory outputFactory) : IDisposable
 
         lock (_gate)
         {
-            output = _output;
+            output = _pointerOutputEnabled ? _output : null;
         }
 
         if (output is not null && !input.Report.IsEmpty && !output.FilterInput(in input))
@@ -147,6 +179,7 @@ public sealed class MouseBroker(IMouseOutputFactory outputFactory) : IDisposable
             return new MouseBrokerStatus(
                 _activeClientId,
                 _mouseOutputEnabled,
+                _pointerOutputEnabled,
                 _output is not null,
                 _outputKind);
         }

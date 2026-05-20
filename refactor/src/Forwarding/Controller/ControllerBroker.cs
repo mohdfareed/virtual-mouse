@@ -20,11 +20,11 @@ public sealed record ControllerSlotStatus(
     ControllerId ControllerId,
     bool OutputConnected,
     ControllerOutput Output,
-    bool HasActiveSteamEndpoint,
+    bool HasActiveClientEndpoint,
     bool HasPhysicalEndpoint,
-    int SteamEndpointCount,
+    int ClientEndpointCount,
     ControllerFeatures? PhysicalFeatures,
-    ControllerFeatures? ActiveSteamFeatures);
+    ControllerFeatures? ActiveClientFeatures);
 
 /// <summary>Routes active-client controller input to game-facing controller outputs.</summary>
 public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : IDisposable, IAsyncDisposable
@@ -83,7 +83,7 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
 
             foreach (ControllerSlot slot in _slots.Values)
             {
-                slot.RemoveSteam(clientId);
+                slot.RemoveClient(clientId);
             }
 
             RefreshOutputs(dispose);
@@ -102,7 +102,7 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
         {
             foreach (ControllerSlot slot in _slots.Values)
             {
-                slot.RemoveSteam(clientId);
+                slot.RemoveClient(clientId);
             }
 
             RefreshOutputs(dispose);
@@ -112,7 +112,7 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
         DisposeOutputs(dispose);
     }
 
-    /// <summary>Updates a Steam-visible controller stream from one client.</summary>
+    /// <summary>Updates a client-visible controller stream from one client.</summary>
     public void UpdateClientController(
         Guid clientId,
         ushort controllerIndex,
@@ -132,7 +132,7 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
             }
 
             ControllerSlot slot = GetOrCreateSlot(physicalControllerId);
-            slot.Steam[new ControllerEndpointId(clientId, controllerIndex)] =
+            slot.ClientEndpoints[new ControllerEndpointId(clientId, controllerIndex)] =
                 new ControllerEndpointState(state, features, feedbackSink);
 
             RefreshOutput(slot);
@@ -264,12 +264,12 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
                     slot.Key,
                     slot.Value.Output is not null,
                     slot.Value.OutputKind,
-                    slot.Value.HasSteam(_activeClientId),
+                    slot.Value.HasClient(_activeClientId),
                     slot.Value.Physical.HasValue,
-                    slot.Value.Steam.Count,
+                    slot.Value.ClientEndpoints.Count,
                     slot.Value.Physical?.Features,
-                    _activeClientId.HasValue && slot.Value.FindSteam(_activeClientId.Value) is { } steam
-                        ? steam.Features
+                    _activeClientId.HasValue && slot.Value.FindClient(_activeClientId.Value) is { } client
+                        ? client.Features
                         : null));
             }
 
@@ -359,14 +359,14 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
     private ControllerOutput GetOutputKind(ControllerSlot slot)
     {
         if (_activeClientId.HasValue &&
-            slot.HasSteam(_activeClientId) &&
+            slot.HasClient(_activeClientId) &&
             _clients.TryGetValue(_activeClientId.Value, out ClientEntry? activeClient) &&
             activeClient.ControllerOutput != ControllerOutput.None)
         {
             return activeClient.ControllerOutput;
         }
 
-        foreach (ControllerEndpointId endpointId in slot.Steam.Keys)
+        foreach (ControllerEndpointId endpointId in slot.ClientEndpoints.Keys)
         {
             if (_clients.TryGetValue(endpointId.ClientId, out ClientEntry? client) &&
                 client.ControllerOutput != ControllerOutput.None)
@@ -382,7 +382,11 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
     {
         return slot.Output is null || !_activeClientId.HasValue
             ? null
-            : !slot.TryGetMergedState(_activeClientId.Value, GetPhysicalFallbackFeatures(), out ControllerState state)
+            : !slot.TryGetMergedState(
+                _activeClientId.Value,
+                GetClientFeatures(),
+                GetPhysicalFallbackFeatures(),
+                out ControllerState state)
             ? null
             : new PendingControllerSend(slot.Output, state);
     }
@@ -407,10 +411,12 @@ public sealed class ControllerBroker(IControllerOutputFactory outputFactory) : I
 
     private ControllerFeatures GetPhysicalFallbackFeatures()
     {
-        ControllerFeatures features =
-            ControllerFeatures.StandardControls |
-            ControllerFeatures.Touchpad;
+        return GetClientFeatures();
+    }
 
+    private ControllerFeatures GetClientFeatures()
+    {
+        ControllerFeatures features = ControllerFeatures.StandardControls | ControllerFeatures.Touchpad;
         return _physicalMotionEnabled
             ? features | ControllerFeatures.Motion
             : features;

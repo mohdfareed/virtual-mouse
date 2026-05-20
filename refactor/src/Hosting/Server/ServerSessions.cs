@@ -88,7 +88,9 @@ internal sealed class ServerSessions(
 
         forwarding.RegisterClient(clientId, MapControllerOutput(resolved.ControllerOutput));
         mouseForwarding.RegisterClient(clientId, MapMouseOutput(resolved.MouseOutput));
-        string controllerPipeName = controllerPipes.Start(clientId);
+        string controllerPipeName = resolved.ControllerOutput == ProfileControllerOutput.None
+            ? string.Empty
+            : controllerPipes.Start(clientId);
 
         return Task.FromResult(new ClientRunLaunch(
             resolved.Id,

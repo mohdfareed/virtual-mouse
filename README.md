@@ -22,10 +22,18 @@ hot paths:
 - Tray status refresh: `500ms`
 - Tray shutdown cleanup wait: `5s`
 
+## Profile Outputs
+
+- `ControllerOutput: None` leaves the native physical controller path alone.
+- `ControllerOutput: Xbox360` or `Ds4` means virtual controller replacement:
+  client-visible input is forwarded to VIIPER and the matching physical
+  controller is hidden from the receiver.
+- Keyboard shortcuts are global server settings. They set `Motion` or `Pointer`
+  to `Enabled` or `Disabled`; Steam Input owns any hold/toggle/action-layer
+  behavior that decides when those shortcuts fire.
+
 ## TODO
 
-- [ ] Keyboard shortcuts support.
-  - Toggle mouse output, motion output, Steam Input forcing
 - [ ] Rename project and merge refactored project, add docs, and update README.
 - [ ] SDL-VIIPER DS4 support with gyro integration.
 - [ ] Touchpad support and feedback capabilities.

@@ -14,6 +14,7 @@ using VirtualMouse.Runtime;
 using VirtualMouse.Settings;
 using VirtualMouse.Settings.Profiles;
 using ForwardingControllerOutput = VirtualMouse.Forwarding.ControllerOutput;
+using ForwardingMouseOutput = VirtualMouse.Forwarding.MouseOutput;
 
 namespace VirtualMouse.Tests;
 
@@ -122,6 +123,44 @@ public sealed class HostingForwardingTests
         }
     }
 
+    /// <summary>Native-controller profiles do not create a controller stream pipe.</summary>
+    [TestMethod]
+    public async Task NativeControllerProfileSkipsControllerPipe()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "VirtualMouse.Refactor.Tests", Guid.NewGuid().ToString("N"));
+        _ = Directory.CreateDirectory(directory);
+        string settingsPath = Path.Combine(directory, "appsettings.json");
+        await File.WriteAllTextAsync(settingsPath, NativeControllerSettingsJson()).ConfigureAwait(false);
+
+        try
+        {
+            using ServiceProvider services = CreateServices(settingsPath);
+            ActiveClientRegistry runtime = new();
+            using ControllerBroker broker = new(new FakeControllerOutputFactory());
+            using MouseBroker mouse = new(new FakeMouseOutputFactory());
+            await using ControllerPipeSessions pipes = new(broker, NullLogger.Instance);
+            ServerSessions sessions = new(
+                NullLogger.Instance,
+                services.GetRequiredService<ProfilesService>(),
+                runtime,
+                broker,
+                mouse,
+                pipes);
+
+            Guid clientId = sessions.ConnectClient(Environment.ProcessId);
+            ClientRunLaunch launch = await sessions
+                .StartRunAsync(clientId, new StartRunRequest("native", SteamAppId: null))
+                .ConfigureAwait(false);
+
+            Assert.AreEqual(string.Empty, launch.ControllerPipeName);
+            Assert.IsEmpty(pipes.GetStatus());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static ServiceProvider CreateServices(string settingsPath)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
@@ -147,6 +186,25 @@ public sealed class HostingForwardingTests
                 "ControllerOutput": "Xbox360",
                 "MouseOutput": "None",
                 "ReceiverProcesses": [ "Game.exe" ]
+              }
+            }
+          }
+        }
+        """;
+    }
+
+    private static string NativeControllerSettingsJson()
+    {
+        return """
+        {
+          "VirtualMouse": {
+            "Games": {
+              "native": {
+                "Title": "Native",
+                "Executable": "C:\\Games\\Native.exe",
+                "ControllerOutput": "None",
+                "MouseOutput": "None",
+                "ReceiverProcesses": [ "Native.exe" ]
               }
             }
           }
@@ -214,6 +272,15 @@ public sealed class HostingForwardingTests
         public ValueTask DisposeAsync()
         {
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class FakeMouseOutputFactory : IMouseOutputFactory
+    {
+        public IMouseOutput Connect(ForwardingMouseOutput output)
+        {
+            _ = output;
+            throw new InvalidOperationException("Mouse output should not connect.");
         }
     }
 

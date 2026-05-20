@@ -24,6 +24,7 @@
     <ProjectReference Include="..\src\Outputs\Teensy\Outputs.Teensy.csproj" />
     <ProjectReference Include="..\src\Outputs\Viiper\Outputs.Viiper.csproj" />
     <ProjectReference Include="..\src\Settings\Settings.csproj" />
+    <ProjectReference Include="..\src\Shortcuts\Shortcuts.csproj" />
     <ProjectReference Include="..\src\Steam\Steam.csproj" />
   </ItemGroup>
 

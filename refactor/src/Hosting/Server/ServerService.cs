@@ -32,6 +32,7 @@ public sealed class ServerService : IAsyncDisposable
     private readonly MouseInputPump _mouseInput;
     private readonly HidHideProfileFirewall? _hidHide;
     private readonly HidHideDeviceCatalog? _hidHideDevices;
+    private readonly ServerShortcutService? _shortcuts;
     private readonly Func<CancellationToken, Task> _startupCleanup;
 
     // MARK: Construction
@@ -58,6 +59,7 @@ public sealed class ServerService : IAsyncDisposable
         MouseBroker? mouseForwarding = null,
         HidHideProfileFirewall? hidHide = null,
         HidHideDeviceCatalog? hidHideDevices = null,
+        ServerShortcutService? shortcuts = null,
         Func<CancellationToken, Task>? startupCleanup = null)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -67,6 +69,7 @@ public sealed class ServerService : IAsyncDisposable
         _startupCleanup = startupCleanup ?? (static _ => Task.CompletedTask);
         _hidHide = hidHide;
         _hidHideDevices = hidHideDevices;
+        _shortcuts = shortcuts;
         _controllerBroker = forwarding ?? new ControllerBroker(new NoopControllerOutputFactory());
         _mouseBroker = mouseForwarding ?? new MouseBroker(new NoopMouseOutputFactory());
         _controllerPipes = new ControllerPipeSessions(_controllerBroker, logger);
@@ -124,6 +127,7 @@ public sealed class ServerService : IAsyncDisposable
         Task orchestrationTask = _activeClients.RunAsync(orchestrationStop.Token);
         _physicalControllers.Start(orchestrationStop.Token);
         _mouseInput.Start(orchestrationStop.Token);
+        _shortcuts?.Start();
 
         try
         {
@@ -165,6 +169,7 @@ public sealed class ServerService : IAsyncDisposable
             await IgnoreCancellationAsync(orchestrationTask).ConfigureAwait(false);
             await _physicalControllers.DisposeAsync().ConfigureAwait(false);
             await _mouseInput.DisposeAsync().ConfigureAwait(false);
+            _shortcuts?.Dispose();
             _hidHide?.Clear();
             await DisposeConnectionsAsync().ConfigureAwait(false);
             await DisposeForwardingAsync().ConfigureAwait(false);
@@ -182,6 +187,7 @@ public sealed class ServerService : IAsyncDisposable
     {
         await _physicalControllers.DisposeAsync().ConfigureAwait(false);
         await _mouseInput.DisposeAsync().ConfigureAwait(false);
+        _shortcuts?.Dispose();
         _hidHide?.Clear();
         await DisposeConnectionsAsync().ConfigureAwait(false);
         await DisposeForwardingAsync().ConfigureAwait(false);

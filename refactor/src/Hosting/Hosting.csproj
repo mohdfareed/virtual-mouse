@@ -16,6 +16,7 @@
     <ProjectReference Include="..\Outputs\Viiper\Outputs.Viiper.csproj" />
     <ProjectReference Include="..\Runtime\Runtime.csproj" />
     <ProjectReference Include="..\Settings\Settings.csproj" />
+    <ProjectReference Include="..\Shortcuts\Shortcuts.csproj" />
     <ProjectReference Include="..\Steam\Steam.csproj" />
   </ItemGroup>
 

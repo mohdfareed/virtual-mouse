@@ -52,10 +52,10 @@ public sealed class GameProfile
     /// <summary>Optional working directory.</summary>
     public string? WorkingDirectory { get; set; }
 
-    /// <summary>Optional virtual controller output.</summary>
+    /// <summary>Virtual replacement controller output. None leaves the native controller visible.</summary>
     public ControllerOutput? ControllerOutput { get; set; }
 
-    /// <summary>Optional mouse output.</summary>
+    /// <summary>Virtual pointer output. None leaves pointer input unmodified.</summary>
     public MouseOutput? MouseOutput { get; set; }
 
     /// <summary>Processes that identify the receiver game.</summary>
