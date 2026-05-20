@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.IO;
@@ -43,6 +44,8 @@ internal sealed class AppContext : IDisposable
             settingsPath,
             logPath,
             ExportSrmManifest,
+            RestartApp,
+            StopClient,
             ShutdownApp);
 
         _refreshTimer = new DispatcherTimer
@@ -71,6 +74,7 @@ internal sealed class AppContext : IDisposable
     {
         _serverTask = Task.Run(RunServerAsync, CancellationToken.None);
         _window.CreateHandle(new CreateParams());
+        WindowsThemeSupport.ApplyToWindow(_window.Handle);
         _tray.Icon = _icon;
         _tray.Text = AppText.TrayStarting;
         _tray.Visible = true;
@@ -167,6 +171,36 @@ internal sealed class AppContext : IDisposable
     private static void ShutdownApp()
     {
         System.Windows.Application.Current.Shutdown();
+    }
+
+    private void StopClient(Guid clientId)
+    {
+        _ = StopClientAsync(clientId);
+    }
+
+    private async Task StopClientAsync(Guid clientId)
+    {
+        await _server.StopClientAsync(clientId).ConfigureAwait(true);
+        _status = await _server.GetStatusAsync().ConfigureAwait(true);
+        _tray.Text = AppText.TrayText(_status, _serverError);
+    }
+
+    private static void RestartApp()
+    {
+        if (Environment.ProcessPath is not { Length: > 0 } processPath)
+        {
+            return;
+        }
+
+        _ = Process.Start(new ProcessStartInfo
+        {
+            FileName = processPath,
+            Arguments = "tray",
+            WorkingDirectory = System.AppContext.BaseDirectory,
+            UseShellExecute = false,
+        });
+
+        ShutdownApp();
     }
 
     private static Icon LoadApplicationIcon()

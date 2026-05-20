@@ -13,9 +13,7 @@ internal static class AppText
 
     public static string Header(string? serverError)
     {
-        return serverError is null
-            ? "Server running"
-            : $"Server stopped: {serverError}";
+        return $"Server stopped: {serverError}";
     }
 
     public static string TrayText(ServerStatus? status, string? serverError)
@@ -83,18 +81,27 @@ internal static class AppText
     {
         return !string.IsNullOrWhiteSpace(status.LastError)
             ? status.ControllerCount == 0
-                ? "physical SDL: retrying"
-                : $"physical SDL: retrying ({status.ControllerCount})"
+                ? "retrying"
+                : $"retrying ({status.ControllerCount})"
             : status.ControllerCount == 0
-            ? "physical SDL: no controllers"
-            : $"physical SDL: running ({status.ControllerCount})";
+            ? "none"
+            : $"{status.ControllerCount}";
+    }
+
+    public static string MouseInput(MouseInputPumpStatus status)
+    {
+        return !string.IsNullOrWhiteSpace(status.LastError)
+            ? "retrying"
+            : status.Running && status.SourceConnected
+            ? "running"
+            : "stopped";
     }
 
     public static string FormatMouseOutput(MouseBrokerStatus status)
     {
         return status.Output == SteamInputBridge.Forwarding.Mouse.MouseOutput.None
-            ? "mouse output: disabled"
-            : $"mouse output: {Output(status.Output)} {Connected(status.OutputConnected)}";
+            ? "disabled"
+            : $"{Output(status.Output)} {Connected(status.OutputConnected)}";
     }
 
     public static string Processes(IReadOnlyList<ObservedGameProcess> processes)

@@ -185,6 +185,12 @@ public sealed class ServerService : IAsyncDisposable
         return _sessions.GetStatusAsync();
     }
 
+    /// <summary>Stops a connected client process and releases its server routes.</summary>
+    public Task StopClientAsync(Guid clientId)
+    {
+        return _sessions.StopClientAsync(clientId);
+    }
+
     /// <summary>Stops server-owned pumps.</summary>
     public async ValueTask DisposeAsync()
     {

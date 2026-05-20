@@ -96,6 +96,29 @@ public static class GameProcessHost
         return KillRoot(process);
     }
 
+    /// <summary>Stops one process by id.</summary>
+    public static int KillProcess(int processId)
+    {
+        try
+        {
+            using Process process = Process.GetProcessById(processId);
+            if (!process.HasExited)
+            {
+                process.Kill();
+                return 1;
+            }
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or
+                InvalidOperationException or
+                NotSupportedException or
+                System.ComponentModel.Win32Exception)
+        {
+        }
+
+        return 0;
+    }
+
     /// <summary>Stops the listed processes and returns how many kill requests were sent.</summary>
     public static int Kill(IReadOnlyList<ObservedGameProcess> processes)
     {

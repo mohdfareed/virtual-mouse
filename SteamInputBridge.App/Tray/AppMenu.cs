@@ -13,6 +13,8 @@ internal sealed class AppMenu(
     string settingsPath,
     string? logPath,
     Action exportSrm,
+    Action restart,
+    Action<Guid> stopClient,
     Action exit)
 {
     public void Show(Point location, IntPtr owner, ServerStatus? status, string? serverError)
@@ -20,24 +22,30 @@ internal sealed class AppMenu(
         NativeMenu.Show(location, owner, BuildItems(status, serverError));
     }
 
-    private IReadOnlyList<NativeMenuItem> BuildItems(ServerStatus? status, string? serverError)
+    private List<NativeMenuItem> BuildItems(ServerStatus? status, string? serverError)
     {
-        return
+        List<NativeMenuItem> items = [];
+        if (!string.IsNullOrWhiteSpace(serverError))
+        {
+            items.Add(NativeMenuItem.Disabled(AppText.Header(serverError)));
+            items.Add(NativeMenuItem.Separator);
+        }
+
+        items.AddRange(
         [
-            NativeMenuItem.Disabled(AppText.Header(serverError)),
-            NativeMenuItem.Separator,
+            NativeMenuItem.Action("Restart server", restart),
             CreateStartupItem(),
             NativeMenuItem.Action("Open settings", () => OpenFile(settingsPath)),
             CreateOpenLogsItem(),
             NativeMenuItem.Action("Export SRM manifest", exportSrm),
             NativeMenuItem.Separator,
-            CreateClientsMenu(status),
-            CreateInputsMenu(status),
-            CreateOutputsMenu(status),
-            CreateSteamInputMenu(status),
+            CreateClientsMenu(status, stopClient),
+            CreateDiagnosticsMenu(status),
             NativeMenuItem.Separator,
             NativeMenuItem.Action("Exit", exit),
-        ];
+        ]);
+
+        return items;
     }
 
     private static NativeMenuItem CreateStartupItem()
@@ -56,7 +64,7 @@ internal sealed class AppMenu(
             : NativeMenuItem.Action("Open logs", () => OpenLogFile(logPath));
     }
 
-    private static NativeMenuItem CreateClientsMenu(ServerStatus? status)
+    private static NativeMenuItem CreateClientsMenu(ServerStatus? status, Action<Guid> stopClient)
     {
         if (status is null || status.Runtime.Clients.Count == 0)
         {
@@ -72,16 +80,27 @@ internal sealed class AppMenu(
             items.Add(NativeMenuItem.Menu(
                 $"{AppText.Active(client.IsActive)} {client.ProfileId}",
                 [
-                    NativeMenuItem.Disabled($"client: {client.ClientId}"),
-                    NativeMenuItem.Disabled($"process: {client.ClientProcessId}"),
+                    NativeMenuItem.Action("Stop client", () => stopClient(client.ClientId)),
+                    NativeMenuItem.Separator,
+                    NativeMenuItem.Disabled($"pid: {client.ClientProcessId}"),
                     NativeMenuItem.Disabled($"steam app: {AppText.AppId(client.SteamAppId)}"),
-                    NativeMenuItem.Disabled($"observed: {AppText.Processes(client.ObservedProcesses)}"),
-                    NativeMenuItem.Disabled($"owned: {AppText.Processes(client.OwnedProcesses)}"),
+                    NativeMenuItem.Disabled($"receivers: {AppText.Processes(client.ObservedProcesses)}"),
                     NativeMenuItem.Disabled($"blocked: {AppText.Processes(client.BlockedProcesses)}"),
                 ]));
         }
 
         return NativeMenuItem.Menu("Clients", items);
+    }
+
+    private static NativeMenuItem CreateDiagnosticsMenu(ServerStatus? status)
+    {
+        return NativeMenuItem.Menu(
+            "Diagnostics",
+            [
+                CreateInputsMenu(status),
+                CreateOutputsMenu(status),
+                CreateSteamInputMenu(status),
+            ]);
     }
 
     private static NativeMenuItem CreateInputsMenu(ServerStatus? status)
@@ -94,15 +113,13 @@ internal sealed class AppMenu(
         PhysicalControllerPumpStatus physical = status.Inputs.PhysicalControllers;
         List<NativeMenuItem> items =
         [
-            NativeMenuItem.Disabled(AppText.PhysicalSdl(physical)),
-            NativeMenuItem.Disabled($"raw input: {AppText.Running(status.Inputs.Mouse.Running)}"),
-            NativeMenuItem.Disabled(
-                $"raw input source: {AppText.Connected(status.Inputs.Mouse.SourceConnected)}"),
+            NativeMenuItem.Disabled($"controllers: {AppText.PhysicalSdl(physical)}"),
+            NativeMenuItem.Disabled($"mouse: {AppText.MouseInput(status.Inputs.Mouse)}"),
         ];
 
         if (!string.IsNullOrWhiteSpace(physical.LastError))
         {
-            items.Add(NativeMenuItem.Disabled($"SDL error: {physical.LastError}"));
+            items.Add(NativeMenuItem.Disabled($"controller error: {physical.LastError}"));
         }
 
         if (!string.IsNullOrWhiteSpace(status.Inputs.Mouse.LastError))
@@ -127,13 +144,10 @@ internal sealed class AppMenu(
 
         List<NativeMenuItem> items =
         [
-            NativeMenuItem.Disabled(AppText.FormatMouseOutput(status.MouseForwarding)),
-            NativeMenuItem.Disabled(
-                $"controller output: {AppText.Enabled(status.Forwarding.ControllerOutputEnabled)}"),
-            NativeMenuItem.Disabled(
-                $"motion: {AppText.Enabled(status.Forwarding.PhysicalMotionEnabled)}"),
-            NativeMenuItem.Disabled(
-                $"pointer: {AppText.Enabled(status.MouseForwarding.PointerOutputEnabled)}"),
+            NativeMenuItem.Disabled($"controller output: {AppText.Enabled(status.Forwarding.ControllerOutputEnabled)}"),
+            NativeMenuItem.Disabled($"motion: {AppText.Enabled(status.Forwarding.PhysicalMotionEnabled)}"),
+            NativeMenuItem.Disabled($"mouse output: {AppText.FormatMouseOutput(status.MouseForwarding)}"),
+            NativeMenuItem.Disabled($"pointer: {AppText.Enabled(status.MouseForwarding.PointerOutputEnabled)}"),
         ];
 
         if (status.Forwarding.Slots.Count == 0)
@@ -168,7 +182,6 @@ internal sealed class AppMenu(
         [
             NativeMenuItem.Disabled($"forced: {AppText.YesNo(status.SteamInput.Forced)}"),
             NativeMenuItem.Disabled($"app id: {AppText.AppId(status.SteamInput.AppId)}"),
-            NativeMenuItem.Disabled($"client: {status.SteamInput.ClientId?.ToString() ?? "none"}"),
         ];
 
         if (!string.IsNullOrWhiteSpace(status.SteamInput.LastError))

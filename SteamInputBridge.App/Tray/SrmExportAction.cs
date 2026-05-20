@@ -27,6 +27,12 @@ internal static class SrmExportAction
                 "SteamInputBridge.exe");
             string manifest = SteamRomManagerExport.CreateJson(profiles, shortcutPath);
 
+            string? directory = Path.GetDirectoryName(manifestPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                _ = Directory.CreateDirectory(directory);
+            }
+
             File.WriteAllText(manifestPath, manifest);
             return SrmExportResult.Success(profiles.ListProfileIds().Count);
         }

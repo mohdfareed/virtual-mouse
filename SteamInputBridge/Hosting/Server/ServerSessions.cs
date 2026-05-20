@@ -138,6 +138,17 @@ internal sealed class ServerSessions(
         await controllerPipes.RemoveAsync(clientId).ConfigureAwait(false);
     }
 
+    internal async Task StopClientAsync(Guid clientId)
+    {
+        ConnectedClient client = GetClient(clientId);
+        if (client.ProcessId != Environment.ProcessId)
+        {
+            _ = GameProcessHost.KillProcess(client.ProcessId);
+        }
+
+        await EndRunAsync(clientId).ConfigureAwait(false);
+    }
+
     internal void ConnectionClosed(Exception exception)
     {
         if (exception is not OperationCanceledException)

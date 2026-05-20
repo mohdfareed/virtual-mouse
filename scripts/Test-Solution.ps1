@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 Push-Location "$PSScriptRoot\.."
 
 try {
-    dotnet test ".\tests\SteamInputBridge.Tests.csproj" @args
+    dotnet test ".\SteamInputBridge.Tests\SteamInputBridge.Tests.csproj" @args
 }
 finally {
     Pop-Location
