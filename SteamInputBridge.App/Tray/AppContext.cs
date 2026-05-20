@@ -17,6 +17,7 @@ internal sealed class AppContext : IDisposable
 {
     private readonly IHost _app;
     private readonly ServerService _server;
+    private readonly Icon _icon = LoadApplicationIcon();
     private readonly NotifyIcon _tray = new();
     private readonly NativeWindow _window = new();
     private readonly DispatcherTimer _refreshTimer;
@@ -70,7 +71,7 @@ internal sealed class AppContext : IDisposable
     {
         _serverTask = Task.Run(RunServerAsync, CancellationToken.None);
         _window.CreateHandle(new CreateParams());
-        _tray.Icon = SystemIcons.Application;
+        _tray.Icon = _icon;
         _tray.Text = AppText.TrayStarting;
         _tray.Visible = true;
         _tray.MouseUp += ShowMenu;
@@ -84,6 +85,7 @@ internal sealed class AppContext : IDisposable
         _tray.MouseUp -= ShowMenu;
         _tray.Visible = false;
         _tray.Dispose();
+        _icon.Dispose();
 
         try
         {
@@ -165,6 +167,13 @@ internal sealed class AppContext : IDisposable
     private static void ShutdownApp()
     {
         System.Windows.Application.Current.Shutdown();
+    }
+
+    private static Icon LoadApplicationIcon()
+    {
+        return Environment.ProcessPath is { Length: > 0 } processPath
+            ? Icon.ExtractAssociatedIcon(processPath) ?? (Icon)SystemIcons.Application.Clone()
+            : (Icon)SystemIcons.Application.Clone();
     }
 
     private void ExportSrmManifest()
