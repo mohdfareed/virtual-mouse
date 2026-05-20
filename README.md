@@ -1,13 +1,13 @@
-# Local Input Forwarding
+# Steam Input Bridge
 
-Project for local input forwarding transports.
+Steam Input orchestration and local input forwarding.
 
 ## Scripts
 
-- `.\scripts\build.ps1` - build and format solution
-- `.\scripts\test.ps1` - run tests
-- `.\scripts\cli.ps1` - run CLI commands (see below)
-- `.\scripts\deploy.ps1` - package and deploy the apps
+- `.\Scripts\Build-Solution.ps1` - build and format solution
+- `.\Scripts\Test-Solution.ps1` - run tests
+- `.\Scripts\Deploy-App.ps1` - package and deploy the apps
+- `.\Scripts\CLI.ps1` - run CLI commands (see below)
 
 ## Runtime Timing
 
@@ -34,7 +34,6 @@ hot paths:
 
 ## TODO
 
-- [ ] Rename project and merge refactored project, add docs, and update README.
 - [ ] SDL-VIIPER DS4 support with gyro integration.
 - [ ] Touchpad support and feedback capabilities.
   - Light-bar RGB, flash timing, trigger rumble

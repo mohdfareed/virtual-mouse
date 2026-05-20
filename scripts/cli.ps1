@@ -1,10 +1,8 @@
-param(
-    [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]]$Arguments
-)
+Push-Location "$PSScriptRoot\..\app"
 
-$ErrorActionPreference = "Stop"
-
-$project = Join-Path $PSScriptRoot "..\cli\Cli.csproj"
-
-dotnet run --project $project -- @Arguments
+try {
+    dotnet run --project .\SteamInputBridge.csproj -- @args
+}
+finally {
+    Pop-Location
+}

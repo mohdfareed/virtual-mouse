@@ -1,8 +1,13 @@
 <Project>
   <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <CodeAnalysisTreatWarningsAsErrors>false</CodeAnalysisTreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+
     <AnalysisMode>AllEnabledByDefault</AnalysisMode>
     <AnalysisModeCodeQuality>All</AnalysisModeCodeQuality>
     <AnalysisModeDesign>All</AnalysisModeDesign>
@@ -11,12 +16,10 @@
     <AnalysisModeMaintainability>All</AnalysisModeMaintainability>
     <AnalysisModeNaming>All</AnalysisModeNaming>
     <AnalysisModePerformance>All</AnalysisModePerformance>
+    <AnalysisModeSingleFile>All</AnalysisModeSingleFile>
     <AnalysisModeReliability>All</AnalysisModeReliability>
     <AnalysisModeSecurity>All</AnalysisModeSecurity>
     <AnalysisModeStyle>All</AnalysisModeStyle>
     <AnalysisModeUsage>All</AnalysisModeUsage>
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <CodeAnalysisTreatWarningsAsErrors>false</CodeAnalysisTreatWarningsAsErrors>
-    <Deterministic>true</Deterministic>
   </PropertyGroup>
 </Project>

@@ -1,7 +1,4 @@
 bin/
 obj/
 
-artifacts/
-deploy/
-
 TestResults/

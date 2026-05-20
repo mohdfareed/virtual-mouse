@@ -1,0 +1,299 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.IO.Pipes;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using SteamInputBridge.Forwarding;
+using SteamInputBridge.Forwarding.Controller;
+using SteamInputBridge.Forwarding.Mouse;
+using SteamInputBridge.Hosting;
+using SteamInputBridge.Hosting.Client;
+using SteamInputBridge.Hosting.Server;
+using SteamInputBridge.Hosting.Server.Pipes;
+using SteamInputBridge.Runtime;
+using SteamInputBridge.Settings;
+using SteamInputBridge.Settings.Profiles;
+using ForwardingControllerOutput = SteamInputBridge.Forwarding.Controller.ControllerOutput;
+using ForwardingMouseOutput = SteamInputBridge.Forwarding.Mouse.MouseOutput;
+
+namespace SteamInputBridge.Tests;
+
+/// <summary>Tests Hosting integration with controller forwarding.</summary>
+[TestClass]
+public sealed class HostingForwardingTests
+{
+    /// <summary>Checks client controller pipe input reaches active forwarding output and feedback returns.</summary>
+    [TestMethod]
+    public async Task ClientControllerPipeFeedsActiveForwardingOutput()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "SteamInputBridge.Tests", Guid.NewGuid().ToString("N"));
+        _ = Directory.CreateDirectory(directory);
+        string settingsPath = Path.Combine(directory, "appsettings.json");
+        await File.WriteAllTextAsync(settingsPath, SettingsJson()).ConfigureAwait(false);
+
+        try
+        {
+            using ServiceProvider services = CreateServices(settingsPath);
+            ActiveClientRegistry runtime = new();
+            FakeControllerOutputFactory factory = new();
+            await using ControllerBroker broker = new(factory);
+            int foregroundProcessId = 0;
+
+            ServerActiveClientLoop activeClients = new(
+                runtime,
+                () => Volatile.Read(ref foregroundProcessId),
+                TimeSpan.FromMilliseconds(5),
+                args => broker.SetActiveClient(args.CurrentClientId));
+
+            await using ServerService server = new(
+                NullLogger<ServerService>.Instance,
+                settingsFile: null,
+                services.GetRequiredService<ProfilesService>(),
+                runtime,
+                activeClients,
+                broker);
+
+            using CancellationTokenSource serverStop = new();
+            Task serverTask = server.RunAsync(serverStop.Token);
+            await using ClientService client = new(NullLoggerFactory.Instance);
+
+            try
+            {
+                await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
+                ClientRunLaunch launch = await client
+                    .StartRunAsync(new StartRunRequest("game", SteamAppId: 123), CancellationToken.None)
+                    .ConfigureAwait(false);
+                await client.RegisterClientControllersAsync(
+                        [new ClientControllerInfo(
+                            0,
+                            "physical-1",
+                            "Physical 1",
+                            ControllerFeatures.StandardControls | ControllerFeatures.Rumble)],
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+
+                using NamedPipeClientStream controllerPipe = new(
+                    ".",
+                    launch.ControllerPipeName,
+                    PipeDirection.InOut,
+                    PipeOptions.Asynchronous);
+                await controllerPipe.ConnectAsync(TimeSpan.FromSeconds(5), CancellationToken.None)
+                    .ConfigureAwait(false);
+
+                await client.UpdateRunProcessesAsync(
+                        [new ObservedGameProcess(321, "Game.exe")],
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+                Volatile.Write(ref foregroundProcessId, 321);
+                await WaitUntilAsync(() => broker.GetStatus().ActiveClientId == client.ClientId)
+                    .ConfigureAwait(false);
+
+                ControllerPipeWriter writer = new(controllerPipe);
+                await writer.WriteInputAsync(new ControllerInputFrame(
+                        0,
+                        new ControllerState(
+                            new ControllerStandardState(ControllerButtons.South, 1, 2, 3, 4, 5, 6),
+                            null,
+                            null)))
+                    .ConfigureAwait(false);
+
+                await WaitUntilAsync(() => factory.Outputs.Count == 1 &&
+                    factory.Outputs[0].LastState.Standard?.Buttons == ControllerButtons.South)
+                    .ConfigureAwait(false);
+
+                factory.Outputs[0].EmitFeedback(new ControllerFeedback(new ControllerRumble(10, 20)));
+                ControllerPipeMessage feedback = await new ControllerPipeReader(controllerPipe)
+                    .ReadAsync(CancellationToken.None)
+                    .AsTask()
+                    .WaitAsync(TimeSpan.FromSeconds(5))
+                    .ConfigureAwait(false);
+
+                Assert.AreEqual(ControllerPipeFrameType.Feedback, feedback.Type);
+                Assert.AreEqual((ushort)10, feedback.Feedback.Feedback.Rumble?.LowFrequency);
+            }
+            finally
+            {
+                await serverStop.CancelAsync().ConfigureAwait(false);
+                await IgnoreCancellationAsync(serverTask.WaitAsync(TimeSpan.FromSeconds(5))).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>Native-controller profiles do not create a controller stream pipe.</summary>
+    [TestMethod]
+    public async Task NativeControllerProfileSkipsControllerPipe()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "SteamInputBridge.Tests", Guid.NewGuid().ToString("N"));
+        _ = Directory.CreateDirectory(directory);
+        string settingsPath = Path.Combine(directory, "appsettings.json");
+        await File.WriteAllTextAsync(settingsPath, NativeControllerSettingsJson()).ConfigureAwait(false);
+
+        try
+        {
+            using ServiceProvider services = CreateServices(settingsPath);
+            ActiveClientRegistry runtime = new();
+            using ControllerBroker broker = new(new FakeControllerOutputFactory());
+            using MouseBroker mouse = new(new FakeMouseOutputFactory());
+            await using ControllerPipeSessions pipes = new(broker, NullLogger.Instance);
+            ServerSessions sessions = new(
+                NullLogger.Instance,
+                services.GetRequiredService<ProfilesService>(),
+                runtime,
+                broker,
+                mouse,
+                pipes);
+
+            Guid clientId = sessions.ConnectClient(Environment.ProcessId);
+            ClientRunLaunch launch = await sessions
+                .StartRunAsync(clientId, new StartRunRequest("native", SteamAppId: null))
+                .ConfigureAwait(false);
+
+            Assert.AreEqual(string.Empty, launch.ControllerPipeName);
+            Assert.IsEmpty(pipes.GetStatus());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static ServiceProvider CreateServices(string settingsPath)
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder()
+            .AddJsonFile(settingsPath, optional: false, reloadOnChange: true)
+            .Build();
+        ServiceCollection services = new();
+        _ = services.AddSingleton<ILogger<ApplicationSettingsService>>(NullLogger<ApplicationSettingsService>.Instance);
+        _ = services.AddSingleton<ILogger<ProfilesService>>(NullLogger<ProfilesService>.Instance);
+        _ = services.AddApplicationSettings(configuration, settingsPath);
+        _ = services.AddProfiles();
+        return services.BuildServiceProvider();
+    }
+
+    private static string SettingsJson()
+    {
+        return """
+        {
+          "SteamInputBridge": {
+            "Games": {
+              "game": {
+                "Title": "Game",
+                "Executable": "C:\\Games\\Game.exe",
+                "ControllerOutput": "Xbox360",
+                "MouseOutput": "None",
+                "ReceiverProcesses": [ "Game.exe" ]
+              }
+            }
+          }
+        }
+        """;
+    }
+
+    private static string NativeControllerSettingsJson()
+    {
+        return """
+        {
+          "SteamInputBridge": {
+            "Games": {
+              "native": {
+                "Title": "Native",
+                "Executable": "C:\\Games\\Native.exe",
+                "ControllerOutput": "None",
+                "MouseOutput": "None",
+                "ReceiverProcesses": [ "Native.exe" ]
+              }
+            }
+          }
+        }
+        """;
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
+        while (!condition())
+        {
+            await Task.Delay(10, timeout.Token).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task IgnoreCancellationAsync(Task task)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private sealed class FakeControllerOutputFactory : IControllerOutputFactory
+    {
+        public List<FakeControllerOutput> Outputs { get; } = [];
+
+        public IControllerOutput Connect(ControllerId controllerId, ForwardingControllerOutput output)
+        {
+            _ = output;
+            FakeControllerOutput connected = new(controllerId);
+            Outputs.Add(connected);
+            return connected;
+        }
+    }
+
+    private sealed class FakeControllerOutput(ControllerId controllerId) : IControllerOutput
+    {
+        private Action<ControllerFeedback>? _feedback;
+
+        public ControllerId ControllerId { get; } = controllerId;
+
+        public ControllerState LastState { get; private set; }
+
+        public void Send(in ControllerState state)
+        {
+            LastState = state;
+        }
+
+        public IDisposable ListenFeedback(Action<ControllerFeedback> handler)
+        {
+            _feedback += handler;
+            return new Subscription(() => _feedback -= handler);
+        }
+
+        public void EmitFeedback(ControllerFeedback feedback)
+        {
+            _feedback?.Invoke(feedback);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class FakeMouseOutputFactory : IMouseOutputFactory
+    {
+        public IMouseOutput Connect(ForwardingMouseOutput output)
+        {
+            _ = output;
+            throw new InvalidOperationException("Mouse output should not connect.");
+        }
+    }
+
+    private sealed class Subscription(Action dispose) : IDisposable
+    {
+        public void Dispose()
+        {
+            dispose();
+        }
+    }
+}

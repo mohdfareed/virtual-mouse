@@ -1,0 +1,23 @@
+{
+  "folders": [
+    {
+      "path": "."
+    },
+    {
+      "name": "firmware",
+      "path": "SteamInputBridge.Firmware"
+    }
+  ],
+  "settings": {
+    "C_Cpp.clang_format_fallbackStyle": "Google",
+    "powershell.cwd": "steam-input-bridge"
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-vscode.cpptools-extension-pack",
+      "streetsidesoftware.code-spell-checker",
+      "adrianwilczynski.namespace",
+      "ms-dotnettools.csdevkit"
+    ]
+  }
+}
